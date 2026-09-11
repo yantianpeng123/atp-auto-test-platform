@@ -47,18 +47,18 @@
       </div>
 
       <el-table :data="list" v-loading="loading" empty-text="暂无用例，点击右上角新增" style="width: 100%">
-        <el-table-column prop="name" label="用例名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="applicationName" label="工程" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="versionName" label="版本" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="moduleName" label="模块" min-width="120" show-overflow-tooltip />
-        <el-table-column label="优先级" width="90" align="center">
+        <el-table-column prop="name" label="用例名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="applicationName" label="工程" min-width="80" show-overflow-tooltip />
+        <el-table-column prop="versionName" label="版本" min-width="80" show-overflow-tooltip />
+        <el-table-column prop="moduleName" label="模块" min-width="80" show-overflow-tooltip />
+        <el-table-column label="优先级" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="levelTagType(row.level)" size="small" effect="dark">
               P{{ row.level - 1 }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="75" align="center">
           <template #default="{ row }">
             <el-switch
               :model-value="row.status === 1"
@@ -70,10 +70,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="updateTime" label="修改时间" width="170" />
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="success" :icon="VideoPlay" @click="handleExecute(row)">执行</el-button>
+            <el-button link type="primary" :icon="DataLine" @click="handleOpenResult(row)">查看结果</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -175,17 +177,172 @@
         <el-button type="primary" :loading="importSubmitting" @click="handleImportSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 执行用例 - 选择环境 -->
+    <el-dialog
+      v-model="executeVisible"
+      title="执行用例"
+      width="460px"
+      :close-on-click-modal="false"
+      append-to-body
+      @closed="resetExecuteDialog"
+    >
+      <el-descriptions :column="1" border size="small" class="execute-desc">
+        <el-descriptions-item label="用例名称">{{ executeTarget?.name }}</el-descriptions-item>
+      </el-descriptions>
+
+      <el-form label-width="80px" class="execute-form">
+        <el-form-item label="执行环境" required>
+          <el-select
+            v-model="envId"
+            placeholder="请选择执行环境"
+            filterable
+            :loading="envLoading"
+            class="execute-select"
+          >
+            <el-option
+              v-for="env in envOptions"
+              :key="env.id"
+              :label="env.name"
+              :value="env.id"
+            />
+          </el-select>
+          <div v-if="selectedEnvBaseUrl" class="env-base-url">baseUrl：{{ selectedEnvBaseUrl }}</div>
+          <div v-else-if="envOptions.length === 0" class="env-empty-tip">
+            当前工程下暂无环境，请先到「环境配置」页新增
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="executeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="executeSubmitting" @click="handleExecuteSubmit">开始执行</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 执行结果抽屉 -->
+    <el-drawer
+      v-model="resultVisible"
+      :title="`执行结果 · ${resultTarget?.name ?? ''}`"
+      size="600px"
+      append-to-body
+      @closed="handleResultClosed"
+    >
+      <div v-if="!currentResult" class="result-empty">
+        <el-empty description="该用例暂无执行结果，请先点击「执行」" />
+      </div>
+      <div v-else class="result-body">
+        <div class="metric-row">
+          <div class="metric-card" :class="currentResult.status === 'SUCCESS' ? 'ok' : 'bad'">
+            <div class="metric-label">状态</div>
+            <div class="metric-value">{{ currentResult.status === 'SUCCESS' ? '成功' : '失败' }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">耗时</div>
+            <div class="metric-value">{{ (currentResult.durationMs / 1000).toFixed(2) }}s</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">轮次</div>
+            <div class="metric-value">{{ currentResult.passedRounds }} / {{ currentResult.totalRounds }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">步骤</div>
+            <div class="metric-value">{{ resultStepPassed }} / {{ resultStepTotal }}</div>
+          </div>
+        </div>
+
+        <el-collapse v-model="activeRounds" class="round-collapse">
+          <el-collapse-item
+            v-for="round in currentResult.rounds"
+            :key="round.roundIndex"
+            :name="round.roundIndex"
+          >
+            <template #title>
+              <span class="round-title">轮次 {{ round.roundIndex + 1 }}</span>
+              <el-tag size="small" :type="round.status === 'SUCCESS' ? 'success' : 'danger'" effect="light">
+                {{ round.status === 'SUCCESS' ? '通过' : '失败' }}
+              </el-tag>
+              <span class="round-meta">步骤 {{ round.passedSteps }} / {{ round.steps.length }}</span>
+            </template>
+
+            <div v-for="step in round.steps" :key="step.stepId + '-' + step.sortOrder" class="step-block">
+              <div class="step-head">
+                <el-tag size="small" :type="statusBadge(step.status).type" effect="light">{{ statusBadge(step.status).text }}</el-tag>
+                <span class="step-code" :class="step.statusCode && step.statusCode < 400 ? 'ok' : 'bad'">{{ step.statusCode }}</span>
+                <span class="step-duration">{{ step.durationMs }}ms</span>
+              </div>
+
+              <div class="detail-block">
+                <div class="detail-label">请求路径</div>
+                <div class="path-line">
+                  <el-tag size="small" :type="methodTagType(step.method)" effect="dark" class="method-inline">{{ step.method }}</el-tag>
+                  <span class="path-text">{{ step.url }}</span>
+                </div>
+              </div>
+
+              <div class="detail-block">
+                <div class="detail-label">
+                  <span>请求体明细</span>
+                  <span v-if="formatBody(step.requestBody).isJson" class="json-hint" @click="copyText(formatBody(step.requestBody).text, '请求体')">复制</span>
+                </div>
+                <pre v-if="formatBody(step.requestBody).text" class="body-pre">{{ formatBody(step.requestBody).text }}</pre>
+                <div v-else class="body-empty">（无请求体）</div>
+              </div>
+
+              <div class="detail-block">
+                <div class="detail-label">
+                  <span>响应体明细</span>
+                  <span v-if="formatBody(step.responseBody).isJson" class="json-hint" @click="copyText(formatBody(step.responseBody).text, '响应体')">复制</span>
+                </div>
+                <pre v-if="formatBody(step.responseBody).text" class="body-pre">{{ formatBody(step.responseBody).text }}</pre>
+                <div v-else class="body-empty">（无响应体）</div>
+              </div>
+
+              <div v-if="step.assertResults.length" class="detail-block">
+                <div class="detail-label">断言结果明细</div>
+                <table class="assert-table">
+                  <thead>
+                    <tr>
+                      <th>类型</th>
+                      <th>路径</th>
+                      <th>操作符</th>
+                      <th>期望</th>
+                      <th>实际</th>
+                      <th class="col-result">结果</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(a, i) in step.assertResults" :key="i">
+                      <td>{{ a.type }}</td>
+                      <td>{{ a.path || '-' }}</td>
+                      <td>{{ a.operator }}</td>
+                      <td>{{ a.expected }}</td>
+                      <td>{{ a.actual }}</td>
+                      <td class="col-result" :class="a.passed ? 'ok' : 'bad'">{{ a.passed ? '✓' : '✗' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div v-if="step.errorMsg" class="step-error">{{ step.errorMsg }}</div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Delete, Edit, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { DataLine, Delete, Edit, Plus, Refresh, Search, Upload, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadFile, type UploadInstance } from 'element-plus'
 import { deleteCase, getCaseList, importCaseHar, updateCaseStatus } from '@/api/case'
 import { getModuleOptions, getProjectOptions, getVersionOptions } from '@/api/base'
-import type { CaseInfo, OptionItem } from '@/api/types'
+import { executeCase } from '@/api/execute'
+import { getEnvList } from '@/api/env'
+import type { CaseExecuteResult, CaseInfo, EnvInfo, OptionItem, StepExecuteResult } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
 
 const router = useRouter()
@@ -397,6 +554,150 @@ async function handleImportSubmit() {
   }
 }
 
+/* ================= 执行用例 ================= */
+const executeVisible = ref(false)
+const executeSubmitting = ref(false)
+const envLoading = ref(false)
+const envOptions = ref<EnvInfo[]>([])
+const envId = ref<number | undefined>(undefined)
+const executeTarget = ref<CaseInfo | null>(null)
+
+/** 选中环境的 baseUrl（自动跟随） */
+const selectedEnvBaseUrl = computed(() => {
+  const env = envOptions.value.find((x) => x.id === envId.value)
+  return env?.baseUrl || ''
+})
+
+/** 点击「执行」：记录目标用例并加载环境选项 */
+async function handleExecute(row: CaseInfo) {
+  executeTarget.value = row
+  envId.value = undefined
+  executeVisible.value = true
+  await loadEnvOptions()
+}
+
+/** 按当前工程加载环境列表 */
+async function loadEnvOptions() {
+  envLoading.value = true
+  try {
+    const res = await getEnvList({
+      projectId: projectStore.currentProject?.id,
+      size: 200
+    })
+    envOptions.value = res.records
+  } catch {
+    envOptions.value = []
+  } finally {
+    envLoading.value = false
+  }
+}
+
+/** 确认执行 */
+async function handleExecuteSubmit() {
+  if (!envId.value) {
+    ElMessage.warning('请先选择执行环境')
+    return
+  }
+  if (!executeTarget.value) return
+  executeSubmitting.value = true
+  try {
+    const result = await executeCase(executeTarget.value.id, envId.value)
+    resultCache.set(executeTarget.value.id, result)
+    ElMessage.success('执行完成')
+    executeVisible.value = false
+  } catch {
+    // 接口层已弹出错误提示
+  } finally {
+    executeSubmitting.value = false
+  }
+}
+
+/** 关闭弹框重置 */
+function resetExecuteDialog() {
+  envId.value = undefined
+  executeTarget.value = null
+}
+
+/* ================= 执行结果 ================= */
+/** 用例 id -> 最近一次执行结果（会话级缓存，刷新即清空） */
+const resultCache = reactive(new Map<number, CaseExecuteResult>())
+const resultVisible = ref(false)
+const resultTarget = ref<CaseInfo | null>(null)
+const activeRounds = ref<number[]>([])
+
+/** 当前 drawer 对应的执行结果 */
+const currentResult = computed<CaseExecuteResult | null>(() => {
+  if (!resultTarget.value) return null
+  return resultCache.get(resultTarget.value.id) ?? null
+})
+
+/** 步骤总数（跨轮汇总） */
+const resultStepTotal = computed(() => {
+  if (!currentResult.value) return 0
+  return currentResult.value.rounds.reduce((sum, r) => sum + r.steps.length, 0)
+})
+
+/** 步骤通过数（跨轮汇总） */
+const resultStepPassed = computed(() => {
+  if (!currentResult.value) return 0
+  return currentResult.value.rounds.reduce((sum, r) => sum + r.passedSteps, 0)
+})
+
+/** 点击「查看结果」：打开抽屉（结果取自缓存） */
+function handleOpenResult(row: CaseInfo) {
+  resultTarget.value = row
+  activeRounds.value = []
+  resultVisible.value = true
+}
+
+/** 关闭抽屉时清空目标用例 */
+function handleResultClosed() {
+  resultTarget.value = null
+}
+
+/** 步骤方法 -> 标签颜色 */
+function methodTagType(method: string | null | undefined): 'success' | 'warning' | 'info' | 'danger' | 'primary' {
+  switch ((method || '').toUpperCase()) {
+    case 'GET': return 'success'
+    case 'POST': return 'warning'
+    case 'PUT': return 'primary'
+    case 'DELETE': return 'danger'
+    default: return 'info'
+  }
+}
+
+/** 步骤状态 -> 展示文本与颜色 */
+function statusBadge(status: StepExecuteResult['status']): { text: string; type: 'success' | 'danger' | 'warning' } {
+  if (status === 'PASSED') return { text: '成功', type: 'success' }
+  if (status === 'FAILED') return { text: '失败', type: 'danger' }
+  return { text: '异常', type: 'warning' }
+}
+
+/** 格式化请求/响应体：尝试 JSON 美化，失败原样返回；空值返回空文本 */
+function formatBody(raw: string | null | undefined): { text: string; isJson: boolean } {
+  if (raw === null || raw === undefined || raw.trim() === '') {
+    return { text: '', isJson: false }
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    return { text: JSON.stringify(parsed, null, 2), isJson: true }
+  } catch {
+    return { text: raw, isJson: false }
+  }
+}
+
+/** 复制文本到剪贴板并提示 */
+function copyText(text: string, label: string) {
+  if (!text) return
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => ElMessage.success(`已复制${label}`))
+      .catch(() => ElMessage.error('复制失败'))
+  } else {
+    ElMessage.error('当前环境不支持复制')
+  }
+}
+
 onMounted(loadList)
 </script>
 
@@ -491,5 +792,215 @@ onMounted(loadList)
 
 .text-muted {
   color: #9ca3af;
+}
+
+/* ---------- 执行用例弹框 ---------- */
+.execute-desc {
+  margin-bottom: 16px;
+}
+
+.execute-select {
+  width: 100%;
+}
+
+.env-base-url {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.env-empty-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #e6a23c;
+}
+
+/* ---------- 执行结果抽屉 ---------- */
+.result-empty {
+  padding: 40px 0;
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.metric-card {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.metric-card.ok .metric-value {
+  color: #3b6d11;
+}
+
+.metric-card.bad .metric-value {
+  color: #a32d2d;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.round-title {
+  font-weight: 500;
+  margin-right: 10px;
+}
+
+.round-meta {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.step-block {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.step-block:last-child {
+  border-bottom: none;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.step-code {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.step-code.ok {
+  color: #3b6d11;
+}
+
+.step-code.bad {
+  color: #a32d2d;
+}
+
+.step-duration {
+  font-size: 12px;
+  color: #909399;
+}
+
+.step-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f56c6c;
+  word-break: break-all;
+}
+
+.detail-block {
+  margin-top: 10px;
+}
+
+.detail-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.json-hint {
+  color: #3b6d11;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.json-hint:hover {
+  text-decoration: underline;
+}
+
+.path-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.method-inline {
+  flex: none;
+}
+
+.path-text {
+  color: #374151;
+  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  word-break: break-all;
+}
+
+.body-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f7f8fa;
+  border-radius: 6px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.body-empty {
+  font-size: 12px;
+  color: #c0c4cc;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.assert-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.assert-table th,
+.assert-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid #f0f1f3;
+  word-break: break-all;
+}
+
+.assert-table th {
+  color: #909399;
+  font-weight: 500;
+}
+
+.assert-table .col-result {
+  width: 48px;
+  text-align: center;
+}
+
+.assert-table td.ok {
+  color: #3b6d11;
+  font-weight: 600;
+}
+
+.assert-table td.bad {
+  color: #a32d2d;
+  font-weight: 600;
 }
 </style>

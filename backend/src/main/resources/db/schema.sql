@@ -276,44 +276,90 @@ CREATE TABLE `tb_dataset_item`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='数据项表';
 
--- 执行记录表（第三阶段）
+-- 执行记录表（头表：一次执行动作的汇总。手动执行=1个用例；计划执行=1个计划，可派生多条记录）
 DROP TABLE IF EXISTS `tb_execution`;
 CREATE TABLE `tb_execution`
 (
-    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    `plan_id`     BIGINT       DEFAULT NULL COMMENT '计划ID',
-    `project_id`  BIGINT       NOT NULL COMMENT '项目ID',
-    `trigger_type` VARCHAR(20) DEFAULT NULL COMMENT 'MANUAL/SCHEDULED/CI',
-    `total`       INT          DEFAULT 0 COMMENT '用例总数',
-    `passed`      INT          DEFAULT 0 COMMENT '通过数',
-    `failed`      INT          DEFAULT 0 COMMENT '失败数',
-    `duration_ms` BIGINT       DEFAULT 0 COMMENT '耗时毫秒',
-    `status`      VARCHAR(20)  DEFAULT NULL COMMENT 'RUNNING/SUCCESS/FAILED',
-    `start_time`  DATETIME     DEFAULT NULL,
-    `end_time`    DATETIME     DEFAULT NULL,
-    `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `plan_id`       BIGINT       DEFAULT NULL COMMENT '计划ID（手动执行为NULL）',
+    `project_id`    BIGINT       NOT NULL COMMENT '项目ID',
+    `case_id`       BIGINT       DEFAULT NULL COMMENT '用例ID（手动执行填）',
+    `case_name`     VARCHAR(200) DEFAULT NULL COMMENT '用例名称快照',
+    `env_id`        BIGINT       DEFAULT NULL COMMENT '执行环境ID',
+    `env_name`      VARCHAR(50)  DEFAULT NULL COMMENT '执行环境名称快照',
+    `trigger_type`  VARCHAR(20)  DEFAULT 'MANUAL' COMMENT 'MANUAL/SCHEDULED/CI',
+    `executor_id`   BIGINT       DEFAULT NULL COMMENT '执行人ID',
+    `status`        VARCHAR(20)  DEFAULT NULL COMMENT 'RUNNING/SUCCESS/FAILED',
+    `total_rounds`  INT          DEFAULT 0 COMMENT '总轮次（参数化多轮）',
+    `passed_rounds` INT          DEFAULT 0 COMMENT '通过轮次',
+    `failed_rounds` INT          DEFAULT 0 COMMENT '失败轮次',
+    `total_steps`   INT          DEFAULT 0 COMMENT '总步骤数',
+    `passed_steps`  INT          DEFAULT 0 COMMENT '通过步骤数',
+    `failed_steps`  INT          DEFAULT 0 COMMENT '失败步骤数',
+    `duration_ms`   BIGINT       DEFAULT 0 COMMENT '耗时毫秒',
+    `start_time`    DATETIME     DEFAULT NULL COMMENT '开始时间',
+    `end_time`      DATETIME     DEFAULT NULL COMMENT '结束时间',
+    `create_time`   DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`       TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-未删 1-已删',
     PRIMARY KEY (`id`),
     KEY `idx_project` (`project_id`),
-    KEY `idx_plan` (`plan_id`)
+    KEY `idx_plan` (`plan_id`),
+    KEY `idx_case` (`case_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='执行记录表';
 
--- 执行明细表（第三阶段）
+-- 执行明细表（每轮每步一行：execution_id + round_index + step_index 唯一定位一个步骤的实际请求/响应）
 DROP TABLE IF EXISTS `tb_execution_detail`;
 CREATE TABLE `tb_execution_detail`
 (
-    `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    `execution_id` BIGINT       NOT NULL COMMENT '执行记录ID',
-    `case_id`      BIGINT       NOT NULL COMMENT '用例ID',
-    `case_name`    VARCHAR(200) DEFAULT NULL COMMENT '用例名称快照',
-    `request`      JSON         DEFAULT NULL COMMENT '实际请求',
-    `response`     JSON         DEFAULT NULL COMMENT '实际响应',
-    `assert_result` JSON        DEFAULT NULL COMMENT '断言结果',
-    `status`       VARCHAR(20)  DEFAULT NULL COMMENT 'PASSED/FAILED/ERROR',
-    `error_msg`    VARCHAR(2000) DEFAULT NULL COMMENT '错误信息',
-    `duration_ms`  BIGINT       DEFAULT 0 COMMENT '耗时毫秒',
-    `create_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `execution_id`     BIGINT       NOT NULL COMMENT '执行记录ID',
+    `case_id`          BIGINT       DEFAULT NULL COMMENT '用例ID（冗余，便于按用例查历史）',
+    `round_index`      INT          NOT NULL DEFAULT 1 COMMENT '轮次（参数化多轮从1起）',
+    `step_index`       INT          NOT NULL DEFAULT 0 COMMENT '步骤序号（同轮内排序）',
+    `step_id`          BIGINT       DEFAULT NULL COMMENT '步骤ID快照',
+    `step_name`        VARCHAR(200) DEFAULT NULL COMMENT '步骤名称快照',
+    `method`           VARCHAR(10)  DEFAULT NULL COMMENT '实际请求方法',
+    `url`              VARCHAR(1000) DEFAULT NULL COMMENT '实际请求URL',
+    `request_headers`  TEXT         DEFAULT NULL COMMENT '实际请求头',
+    `request_body`     LONGTEXT     DEFAULT NULL COMMENT '实际请求体',
+    `response_headers` TEXT         DEFAULT NULL COMMENT '实际响应头',
+    `response_body`    LONGTEXT     DEFAULT NULL COMMENT '实际响应体',
+    `status_code`      INT          DEFAULT NULL COMMENT '响应状态码',
+    `status`           VARCHAR(20)  DEFAULT NULL COMMENT 'PASSED/FAILED/ERROR',
+    `error_msg`        VARCHAR(2000) DEFAULT NULL COMMENT '错误信息',
+    `duration_ms`      BIGINT       DEFAULT 0 COMMENT '耗时毫秒',
+    `create_time`      DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`          TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-未删 1-已删',
     PRIMARY KEY (`id`),
-    KEY `idx_execution` (`execution_id`)
+    KEY `idx_execution` (`execution_id`),
+    KEY `idx_case` (`case_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='执行明细表';
+
+-- 断言结果表（每条断言一行，归属某一步骤，便于按接口/断言维度做通过率统计）
+DROP TABLE IF EXISTS `tb_execution_assertion`;
+CREATE TABLE `tb_execution_assertion`
+(
+    `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `execution_id` BIGINT       NOT NULL COMMENT '执行记录ID（冗余，便于单表统计）',
+    `detail_id`    BIGINT       NOT NULL COMMENT '执行明细ID',
+    `round_index`  INT          NOT NULL DEFAULT 1 COMMENT '轮次',
+    `step_index`   INT          NOT NULL DEFAULT 0 COMMENT '步骤序号',
+    `type`         VARCHAR(20)  DEFAULT NULL COMMENT '断言类型 status/jsonPath/header/body',
+    `path`         VARCHAR(200) DEFAULT NULL COMMENT 'jsonPath 或响应头名',
+    `operator`     VARCHAR(20)  DEFAULT NULL COMMENT 'eq/notEq/contains/exists',
+    `expected`     VARCHAR(500) DEFAULT NULL COMMENT '期望值',
+    `actual`       VARCHAR(500) DEFAULT NULL COMMENT '实际值',
+    `passed`       TINYINT(1)   DEFAULT 0 COMMENT '是否通过 0-否 1-是',
+    `message`      VARCHAR(500) DEFAULT NULL COMMENT '失败原因',
+    `create_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`      TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-未删 1-已删',
+    PRIMARY KEY (`id`),
+    KEY `idx_detail` (`detail_id`),
+    KEY `idx_execution` (`execution_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='断言结果表';
