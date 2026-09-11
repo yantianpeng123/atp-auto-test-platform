@@ -28,7 +28,19 @@ import com.atp.module.testcase.mapper.DatasetItemMapper;
 import com.atp.module.testcase.mapper.DatasetTemplateMapper;
 import com.atp.module.testcase.mapper.TestCaseMapper;
 import com.atp.module.testcase.vo.CaseStepVO;
+import com.atp.module.execute.entity.Execution;
+import com.atp.module.execute.entity.ExecutionAssertion;
+import com.atp.module.execute.entity.ExecutionDetail;
+import com.atp.module.execute.mapper.ExecutionAssertionMapper;
+import com.atp.module.execute.mapper.ExecutionDetailMapper;
+import com.atp.module.execute.mapper.ExecutionMapper;
+import com.atp.security.UserPrincipal;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -45,6 +57,7 @@ import java.util.Map;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(rollbackFor = Exception.class)
 public class ExecuteServiceImpl implements ExecuteService {
 
     private final TestCaseMapper testCaseMapper;
@@ -55,6 +68,9 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final AssertionEngine assertionEngine;
     private final DatasetTemplateMapper datasetTemplateMapper;
     private final DatasetItemMapper datasetItemMapper;
+    private final ExecutionMapper executionMapper;
+    private final ExecutionDetailMapper executionDetailMapper;
+    private final ExecutionAssertionMapper executionAssertionMapper;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
@@ -120,7 +136,8 @@ public class ExecuteServiceImpl implements ExecuteService {
         }
 
         long duration = System.currentTimeMillis() - caseStart;
-        return CaseExecuteVO.builder()
+
+        CaseExecuteVO vo = CaseExecuteVO.builder()
                 .caseId(caseId)
                 .caseName(testCase.getName())
                 .envId(env.getId())
@@ -131,6 +148,14 @@ public class ExecuteServiceImpl implements ExecuteService {
                 .durationMs(duration)
                 .rounds(rounds)
                 .build();
+
+        // ============ 持久化执行记录（头表 + 每轮每步明细 + 断言） ============
+        // 调试运行不落库，仅正式「执行」才记录
+        if (!Boolean.TRUE.equals(request.getDebug())) {
+            persistExecution(caseId, testCase, env, vo, duration);
+        }
+
+        return vo;
     }
 
     private List<Map<String, Object>> loadDatasetRows(Long caseId) {
@@ -375,5 +400,190 @@ public class ExecuteServiceImpl implements ExecuteService {
             // 非法 JSON 忽略，返回空列表
         }
         return list;
+    }
+
+    // ==================== 执行记录持久化 ====================
+
+    /** 将一次执行结果落库：头表 + 每轮每步明细 + 每条断言 */
+    private void persistExecution(Long caseId, TestCase testCase, TestEnv env,
+                                  CaseExecuteVO vo, long duration) {
+        LocalDateTime start = LocalDateTime.now();
+        Execution exec = new Execution();
+        exec.setProjectId(testCase.getProjectId());
+        exec.setCaseId(caseId);
+        exec.setCaseName(testCase.getName());
+        exec.setEnvId(env.getId());
+        exec.setEnvName(env.getName());
+        exec.setTriggerType("MANUAL");
+        exec.setExecutorId(currentUserId());
+        exec.setStatus(vo.getStatus());
+        exec.setTotalRounds(vo.getTotalRounds());
+        exec.setPassedRounds(vo.getPassedRounds());
+        exec.setFailedRounds(vo.getFailedRounds());
+
+        int totalSteps = 0, passedSteps = 0, failedSteps = 0;
+        for (RoundExecuteVO r : vo.getRounds()) {
+            totalSteps += r.getSteps().size();
+            passedSteps += r.getPassedSteps();
+            failedSteps += r.getFailedSteps();
+        }
+        exec.setTotalSteps(totalSteps);
+        exec.setPassedSteps(passedSteps);
+        exec.setFailedSteps(failedSteps);
+        exec.setDurationMs(duration);
+        exec.setStartTime(start);
+        exec.setEndTime(LocalDateTime.now());
+        executionMapper.insert(exec);
+
+        for (RoundExecuteVO round : vo.getRounds()) {
+            for (int si = 0; si < round.getSteps().size(); si++) {
+                StepExecuteVO s = round.getSteps().get(si);
+                ExecutionDetail d = new ExecutionDetail();
+                d.setExecutionId(exec.getId());
+                d.setCaseId(caseId);
+                d.setRoundIndex(round.getRoundIndex());
+                d.setStepIndex(si);
+                d.setStepId(s.getStepId());
+                d.setStepName(s.getStepName());
+                d.setMethod(s.getMethod());
+                d.setUrl(s.getUrl());
+                d.setRequestHeaders(s.getRequestHeaders());
+                d.setRequestBody(s.getRequestBody());
+                d.setResponseHeaders(s.getResponseHeaders());
+                d.setResponseBody(s.getResponseBody());
+                d.setStatusCode(s.getStatusCode());
+                d.setStatus(s.getStatus());
+                d.setErrorMsg(s.getErrorMsg());
+                d.setDurationMs(s.getDurationMs());
+                executionDetailMapper.insert(d);
+
+                if (s.getAssertResults() != null) {
+                    for (AssertionResultVO a : s.getAssertResults()) {
+                        ExecutionAssertion ea = new ExecutionAssertion();
+                        ea.setExecutionId(exec.getId());
+                        ea.setDetailId(d.getId());
+                        ea.setRoundIndex(round.getRoundIndex());
+                        ea.setStepIndex(si);
+                        ea.setType(a.getType());
+                        ea.setPath(a.getPath());
+                        ea.setOperator(a.getOperator());
+                        ea.setExpected(a.getExpected());
+                        ea.setActual(a.getActual());
+                        ea.setPassed(a.getPassed() != null && a.getPassed() ? 1 : 0);
+                        ea.setMessage(a.getMessage());
+                        executionAssertionMapper.insert(ea);
+                    }
+                }
+            }
+        }
+    }
+
+    /** 取当前登录用户 ID（无登录上下文时返回 null） */
+    private Long currentUserId() {
+        try {
+            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            if (principal instanceof UserPrincipal up) {
+                return up.getId();
+            }
+        } catch (Exception ignored) {
+            // 非 Web 上下文或尚未认证
+        }
+        return null;
+    }
+
+    // ==================== 历史查询 ====================
+
+    @Override
+    @Transactional(readOnly = true)
+    public CaseExecuteVO getLatestExecution(Long caseId) {
+        Execution exec = executionMapper.selectOne(new QueryWrapper<Execution>()
+                .eq("case_id", caseId)
+                .orderByDesc("create_time")
+                .last("LIMIT 1"));
+        if (exec == null) {
+            return null;
+        }
+
+        List<ExecutionDetail> details = executionDetailMapper.selectList(new QueryWrapper<ExecutionDetail>()
+                .eq("execution_id", exec.getId())
+                .orderByAsc("round_index")
+                .orderByAsc("step_index"));
+        List<ExecutionAssertion> assertions = executionAssertionMapper.selectList(
+                new QueryWrapper<ExecutionAssertion>().eq("execution_id", exec.getId()));
+
+        Map<Long, List<ExecutionAssertion>> assertByDetail = assertions.stream()
+                .collect(Collectors.groupingBy(ExecutionAssertion::getDetailId));
+
+        Map<Integer, List<StepExecuteVO>> stepsByRound = new LinkedHashMap<>();
+        Map<Integer, Integer> roundPassed = new HashMap<>();
+        Map<Integer, Integer> roundFailed = new HashMap<>();
+        Map<Integer, Long> roundDuration = new HashMap<>();
+
+        for (ExecutionDetail d : details) {
+            List<ExecutionAssertion> ads = assertByDetail.get(d.getId());
+            List<AssertionResultVO> assertResults = (ads == null ? List.of()
+                    : ads.stream().map(a -> AssertionResultVO.builder()
+                            .type(a.getType())
+                            .path(a.getPath())
+                            .operator(a.getOperator())
+                            .expected(a.getExpected())
+                            .actual(a.getActual())
+                            .passed(a.getPassed() != null && a.getPassed() == 1)
+                            .message(a.getMessage())
+                            .build()).toList());
+
+            StepExecuteVO step = StepExecuteVO.builder()
+                    .stepId(d.getStepId())
+                    .stepName(d.getStepName())
+                    .sortOrder(d.getStepIndex())
+                    .method(d.getMethod())
+                    .url(d.getUrl())
+                    .requestHeaders(d.getRequestHeaders())
+                    .requestBody(d.getRequestBody())
+                    .statusCode(d.getStatusCode())
+                    .responseHeaders(d.getResponseHeaders())
+                    .responseBody(d.getResponseBody())
+                    .status(d.getStatus())
+                    .errorMsg(d.getErrorMsg())
+                    .durationMs(d.getDurationMs())
+                    .assertResults(assertResults)
+                    .build();
+            stepsByRound.computeIfAbsent(d.getRoundIndex(), k -> new ArrayList<>()).add(step);
+            if ("PASSED".equals(d.getStatus())) {
+                roundPassed.merge(d.getRoundIndex(), 1, Integer::sum);
+            } else {
+                roundFailed.merge(d.getRoundIndex(), 1, Integer::sum);
+            }
+            roundDuration.merge(d.getRoundIndex(), d.getDurationMs() == null ? 0L : d.getDurationMs(), Long::sum);
+        }
+
+        List<RoundExecuteVO> rounds = new ArrayList<>();
+        stepsByRound.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+            int idx = e.getKey();
+            List<StepExecuteVO> steps = e.getValue();
+            int passed = roundPassed.getOrDefault(idx, 0);
+            int failed = roundFailed.getOrDefault(idx, 0);
+            rounds.add(RoundExecuteVO.builder()
+                    .roundIndex(idx)
+                    .params(new LinkedHashMap<>())
+                    .passedSteps(passed)
+                    .failedSteps(failed)
+                    .status(failed == 0 ? "SUCCESS" : "FAILED")
+                    .durationMs(roundDuration.getOrDefault(idx, 0L))
+                    .steps(steps)
+                    .build());
+        });
+
+        return CaseExecuteVO.builder()
+                .caseId(exec.getCaseId())
+                .caseName(exec.getCaseName())
+                .envId(exec.getEnvId())
+                .totalRounds(exec.getTotalRounds())
+                .passedRounds(exec.getPassedRounds())
+                .failedRounds(exec.getFailedRounds())
+                .status(exec.getStatus())
+                .durationMs(exec.getDurationMs())
+                .rounds(rounds)
+                .build();
     }
 }

@@ -7,6 +7,7 @@ import com.atp.module.execute.vo.CaseExecuteVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,5 +28,11 @@ public class ExecuteController {
     public Result<CaseExecuteVO> executeCase(@PathVariable Long caseId,
                                              @Valid @RequestBody CaseExecuteRequest request) {
         return Result.success(executeService.executeCase(caseId, request));
+    }
+
+    /** 查询用例最近一次执行记录（刷新后不丢） */
+    @GetMapping("/history/{caseId}")
+    public Result<CaseExecuteVO> getHistory(@PathVariable Long caseId) {
+        return Result.success(executeService.getLatestExecution(caseId));
     }
 }

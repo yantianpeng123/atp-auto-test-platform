@@ -16,4 +16,12 @@ public interface ExecuteService {
      * @return 执行汇总结果
      */
     CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request);
+
+    /**
+     * 查询用例最近一次执行记录（持久化数据）。
+     *
+     * @param caseId 用例 ID
+     * @return 最近一次执行结果；无记录时返回 null
+     */
+    CaseExecuteVO getLatestExecution(Long caseId);
 }

@@ -340,7 +340,7 @@ import { DataLine, Delete, Edit, Plus, Refresh, Search, Upload, VideoPlay } from
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadFile, type UploadInstance } from 'element-plus'
 import { deleteCase, getCaseList, importCaseHar, updateCaseStatus } from '@/api/case'
 import { getModuleOptions, getProjectOptions, getVersionOptions } from '@/api/base'
-import { executeCase } from '@/api/execute'
+import { executeCase, getExecutionHistory } from '@/api/execute'
 import { getEnvList } from '@/api/env'
 import type { CaseExecuteResult, CaseInfo, EnvInfo, OptionItem, StepExecuteResult } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
@@ -622,6 +622,7 @@ function resetExecuteDialog() {
 /** 用例 id -> 最近一次执行结果（会话级缓存，刷新即清空） */
 const resultCache = reactive(new Map<number, CaseExecuteResult>())
 const resultVisible = ref(false)
+const resultLoading = ref(false)
 const resultTarget = ref<CaseInfo | null>(null)
 const activeRounds = ref<number[]>([])
 
@@ -643,11 +644,23 @@ const resultStepPassed = computed(() => {
   return currentResult.value.rounds.reduce((sum, r) => sum + r.passedSteps, 0)
 })
 
-/** 点击「查看结果」：打开抽屉（结果取自缓存） */
-function handleOpenResult(row: CaseInfo) {
+/** 点击「查看结果」：从后端读取最近一次执行记录（持久化数据，刷新不丢） */
+async function handleOpenResult(row: CaseInfo) {
   resultTarget.value = row
   activeRounds.value = []
   resultVisible.value = true
+  resultLoading.value = true
+  try {
+    const res = await getExecutionHistory(row.id)
+    // 仅在有记录时覆盖缓存；无记录则保留本次会话内刚执行的结果（如有）
+    if (res) {
+      resultCache.set(row.id, res)
+    }
+  } catch {
+    // 接口层已弹出错误提示；保留缓存中的结果（如有）
+  } finally {
+    resultLoading.value = false
+  }
 }
 
 /** 关闭抽屉时清空目标用例 */
@@ -818,6 +831,11 @@ onMounted(loadList)
 /* ---------- 执行结果抽屉 ---------- */
 .result-empty {
   padding: 40px 0;
+}
+
+.result-loading-text {
+  font-size: 13px;
+  color: #909399;
 }
 
 .metric-row {

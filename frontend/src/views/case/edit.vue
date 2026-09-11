@@ -689,7 +689,7 @@ async function handleDebug() {
   }
   debugging.value = true
   try {
-    debugResult.value = await executeCase(editingId.value, debugEnvId.value)
+    debugResult.value = await executeCase(editingId.value, debugEnvId.value, true)
     debugVisible.value = true
   } catch {
     // 错误提示已由拦截器处理
