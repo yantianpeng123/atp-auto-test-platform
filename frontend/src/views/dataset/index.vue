@@ -120,6 +120,8 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteDataset, getDatasetDetail, getDatasetList } from '@/api/dataset'
 import type { CaseDatasetInfo } from '@/api/types'
+import DatasetItemsDialog from './components/DatasetItemsDialog.vue'
+import DatasetFormDialog from './components/DatasetFormDialog.vue'
 
 const loading = ref(false)
 const list = ref<CaseDatasetInfo[]>([])
