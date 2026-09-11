@@ -68,6 +68,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'DatasetList',
         component: () => import('@/views/dataset/index.vue'),
         meta: { title: '数据源管理', icon: 'Coin' }
+      },
+      {
+        path: 'plan',
+        name: 'PlanList',
+        component: () => import('@/views/plan/index.vue'),
+        meta: { title: '测试计划', icon: 'Timer' }
       }
     ]
   },

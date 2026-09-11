@@ -51,7 +51,7 @@
             <el-icon><VideoPlay /></el-icon>
             <span>执行与报告</span>
           </template>
-          <el-menu-item index="/plan" disabled>
+          <el-menu-item index="/plan">
             <el-icon><Timer /></el-icon>
             <span>测试计划</span>
           </el-menu-item>
