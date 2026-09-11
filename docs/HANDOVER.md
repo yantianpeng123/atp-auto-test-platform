@@ -1,38 +1,39 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-04
-> 定位：接口自动化 / 用例管理 / 持续回归平台（前后端分离）
+> 更新时间：2026-09-12
+> 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
+> 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
 
 ---
 
 ## 一、项目概述
 
-一个面向研发团队的**接口自动化测试平台**，核心价值：用例资产化、执行无人化、报告可视化、权限清晰化。
+面向研发团队的**接口自动化测试平台**。核心价值：用例资产化、步骤串行编排、参数跨步骤传递、调试执行可视化。
 
-整体架构为**单体分层**（非微服务）：后端按 `module`（业务域）划分包，模块间不横向依赖；前端 SPA + 路由守卫 + Pinia 状态管理。
+整体为**单体分层架构**（非微服务）：后端按 `module`（业务域）划分包，模块间不横向依赖；前端 SPA + 路由守卫 + Pinia 状态管理。
 
 ---
 
 ## 二、技术栈
 
-### 后端（backend/）
+### 后端（`backend/`）
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| JDK | 17（本机 20） | Spring Boot 3 基线 |
+| JDK | 17（本机 20 验证通过） | Spring Boot 3 基线 |
 | Spring Boot | 3.2.5 | 单体分层 |
 | Spring Security | 6.x | 无状态 JWT 鉴权 |
-| jjwt | 0.12.6 | JWT 签发/解析 |
-| MyBatis-Plus | 3.5.7 | 单表 CRUD + 分页 + 自动填充 |
-| MySQL | 8.0 | 主存储（JSON 字段存断言/请求体） |
+| jjwt | 0.12.6 | JWT 签发/解析（HS256） |
+| MyBatis-Plus | 3.5.7 | CRUD + 分页 + 逻辑删除 |
+| MySQL | 8.0 | 主存储（`atp` 库，账号 `root/root`） |
 | Redis | 7.x | 验证码 / token 黑名单（**非强依赖**） |
 | Lombok / Hutool | latest | 样板代码 / 工具 |
 
-### 前端（frontend/）
+### 前端（`frontend/`）
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
 | Vue | 3.5 | Composition API + `<script setup>` |
 | TypeScript | 5.6 | 类型与后端 VO/DTO 对齐 |
-| Vite | 5.4 | 构建 + `/api` 代理 |
+| Vite | 5.4 | 构建 + `/api` 代理到 8080 |
 | Element Plus | 2.8 | UI 组件 |
 | Pinia | 2.2 | 状态管理 |
 | Vue Router | 4.4 | 路由守卫 |
@@ -44,135 +45,134 @@
 
 | 组件 | 端口 | 说明 |
 | --- | --- | --- |
-| MySQL | 3306 | 库 `atp`，账号 `root/root`，执行 `backend/src/main/resources/db/schema.sql` |
+| MySQL | 3306 | 库 `atp`，账号 `root/root`，脚本 `backend/src/main/resources/db/schema.sql` |
 | Redis | 6379 | 可选，不启动也可运行（验证码降级隐藏） |
-| 后端 | 8080 | `cd backend && mvn spring-boot:run`（本机需 `export JAVA_HOME=$(/usr/libexec/java_home -v 20)`） |
-| 前端 | 5173 | `cd frontend && npm run dev`，`/api` 代理到 8080 |
+| 后端 | 8080 | `cd backend && mvn spring-boot:run`（本机须 `export JAVA_HOME=$(/usr/libexec/java_home -v 20)`） |
+| 前端 | 5173 | `cd frontend && npm run dev` |
 
-初始账号：`admin / admin123`（角色 ADMIN）；注册新用户默认 TESTER。
+初始账号：`admin / admin123`（ADMIN）；注册新用户默认 TESTER。
+
+**前端构建校验**：`NODE_OPTIONS=--max-old-space-size=4096 npx vue-tsc --noEmit`（不加内存参数会 OOM）。
 
 ---
 
-## 四、项目结构
+## 四、当前进度总览
 
-### 4.1 后端（`backend/src/main/java/com/atp/`）
+| 阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| 第一阶段 | 架构 + JWT 鉴权 + 登录注册 + 项目管理 | ✅ 完成 |
+| 第二阶段 | 基础数据（工程/版本/模块）+ 接口定义 | ✅ 完成 |
+| **第三阶段** | **用例管理 + 步骤编排 + 执行引擎 + 数据源** | **🔶 主体完成，报告/计划未做** |
+| 第四阶段 | 报告中心、图表看板、通知 | ⬜ 未开始 |
+| 第五阶段 | CI 集成、项目级 RBAC、并发执行 | ⬜ 未开始 |
+
+### 4.1 已完成模块
+
+| 模块 | 后端 | 前端 | 说明 |
+| --- | --- | --- | --- |
+| 用户认证 | ✅ | ✅ | 注册、登录、登出、图形验证码、JWT、角色体系 |
+| 项目管理 | ✅ | ✅ | 项目列表、新增、选择（localStorage 持久化）、切换 |
+| 基础数据 | ✅ | ✅ | 工程/版本/模块 级联查询与新增；接口列表、手动新增、Jar 包导入 |
+| 环境配置 | ✅ | ✅ | 环境 CRUD（base_url / 全局 header / 数据库配置） |
+| 用例管理 | ✅ | ✅ | 用例 CRUD、状态启停、**多步骤串行编排**、**HAR 导入** |
+| 数据源管理 | ✅ | ✅ | 数据源模板 CRUD、字段(key) 定义、**数据项多行编辑** |
+| 执行引擎 | ✅ | ✅（调试入口） | HTTP 执行、变量解析、断言引擎、多轮数据驱动 |
+
+### 4.2 尚未实现
+
+- **测试计划**（`tb_test_plan` 表已建，后端模块与页面均无）
+- **执行记录落库**（`tb_execution` / `tb_execution_detail` 表已建，**无 Entity/Mapper**，执行结果仅返回 VO 不持久化）
+- **报告中心 / 图表看板**
+- **Cron 调度**
+- **CI 集成、项目级 RBAC**
+
+前端菜单中「测试计划」「报告中心」为 `disabled` 占位态。
+
+---
+
+## 五、项目结构
+
+### 5.1 后端（`backend/src/main/java/com/atp/`）
 
 ```
-AtpApplication.java              # 启动类（@MapperScan 扫描 module.**.mapper）
 common/
   result/     Result.java        # 统一返回体 {code,message,data,timestamp}
-              ResultCode.java    # 错误码枚举（分段）
-  exception/  BizException.java  # 业务异常
-              GlobalExceptionHandler.java
+              ResultCode.java    # 错误码枚举
+  exception/  BizException.java / GlobalExceptionHandler.java
   util/       IpUtils.java
 config/
   SecurityConfig.java            # 无状态 JWT + 白名单
-  CorsConfig.java                # 跨域
-  MybatisPlusConfig.java         # 分页插件 + createTime/updateTime 自动填充
-  JacksonConfig.java             # LocalDateTime 统一 yyyy-MM-dd HH:mm:ss
+  CorsConfig.java / MybatisPlusConfig.java / JacksonConfig.java
 security/
-  JwtTokenProvider.java          # 签发/解析 JWT（HS256，载荷 userId/username/role）
+  JwtTokenProvider.java          # HS256，载荷 userId/username/role
   JwtAuthenticationFilter.java   # 每请求解析 token + Redis 黑名单校验
-  UserPrincipal.java             # 登录主体（实现 UserDetails）
-module/                          # 业务域，互不横向依赖
-  user/                          # 用户模块（entity/mapper/service/controller/dto/vo）
-  project/                       # 项目模块
-  base/                          # 基础数据模块（工程/版本/模块/接口定义）
-    util/JarApiParser.java       # Jar 包 Spring MVC 注解解析器
+  UserPrincipal.java
+module/
+  user/       (13)  用户模块
+  project/    (7)   项目模块
+  base/       (27)  基础数据：工程/版本/模块/接口定义 + JarApiParser
+  env/        (8)   环境配置
+  testcase/   (19)  用例 + 步骤 + HAR 导入
+  dataset/    (7)   数据源模板与数据项
+  execute/    (13)  执行引擎（HTTP/断言/变量解析）
 ```
 
-**分层约定**（每个 module 内）：
-- `controller`：只做参数校验（`@Valid`）与结果装配
-- `service` / `service/impl`：业务编排、事务边界（`@Transactional` 只在此层）
-- `mapper`：只做数据访问
-- `entity`：与表一一对应（`@TableName` / `@TableId` / `@TableLogic` / `@TableField(fill)`）
-- `dto`：接收前端入参（带校验注解）
-- `vo`：返回前端出参（脱敏）
+**分层约定**（每个 module 内）：`controller`（参数校验 + 结果装配）→ `service`/`impl`（业务编排、`@Transactional` 只在此层）→ `mapper`（数据访问）；另有 `entity`（与表一一对应）、`dto`（入参）、`vo`（出参）。
 
-### 4.2 前端（`frontend/src/`）
+### 5.2 前端（`frontend/src/`）
 
 ```
-api/        request.ts   # axios 实例 + 请求/响应拦截器（token 注入、code 拆包、401 跳登录）
-            auth.ts      # 认证接口
-            project.ts   # 项目接口
-            base.ts      # 工程/版本/模块/接口 接口
-            types.ts     # 与后端 VO/DTO 对齐的类型
-router/     index.ts     # 路由表 + 登录守卫 + 项目选择守卫
-stores/     user.ts      # 登录态（token/userInfo）
-            project.ts   # 当前项目（localStorage 持久化）
-layout/     BasicLayout.vue  # 主布局（侧边栏 + 顶栏 + 当前项目展示）
+api/      request.ts   # axios 拦截器（token 注入、code 拆包、401 跳登录）
+          auth.ts / user.ts / project.ts / base.ts
+          case.ts / dataset.ts / env.ts / execute.ts
+          types.ts     # 与后端 VO/DTO 对齐的类型
+router/   index.ts     # 路由表 + 登录守卫 + 项目选择守卫
+stores/   user.ts / project.ts / tabs.ts
+layout/   BasicLayout.vue   # 侧边栏 + 顶栏 + 当前项目
 views/
-  login/    注册/登录
-  project/select.vue     # 项目选择页（卡片，管理员可新增）
-  dashboard/             # 工作台
-  base/version/          # 工程版本信息（工程/版本/模块级联 + 新增弹框）
-  base/api/              # 接口列表（级联查询 + 手动新增弹框 + Jar 导入弹框）
-utils/      auth.ts / token.ts  # token 存取（token.ts 为遗留冗余）
+  login/ register/       登录 / 注册
+  project/select.vue     项目选择
+  dashboard/             工作台
+  base/version/          工程版本管理
+  base/api/              接口列表（含 Jar 导入）
+  env/                   环境配置
+  case/index.vue         用例列表（含 **HAR 导入**）
+  case/edit.vue          用例编辑（**多步骤串行编排**，约 1600 行）
+  dataset/               数据源管理（列表 + 数据项 + 编辑）
+  dataset/components/    DatasetItemsDialog / DatasetFormDialog / DatasetSelectDialog
+utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ```
 
 ---
 
-## 五、前后端关系（调用链）
+## 六、数据库设计
 
-**认证链路**：
-登录 → `POST /api/auth/login` 返回 JWT → 前端存 `localStorage.atp_token` → axios 请求拦截器自动带 `Authorization: Bearer <token>` → 后端 `JwtAuthenticationFilter` 解析并构建 `SecurityContext` → 白名单外接口须鉴权。
+### 已建表（15 张）
 
-**业务链路（核心数据层级）**：
-```
-项目 Project → 工程 Application → 版本 Version → 模块 Module → 接口 ApiDefinition
-```
-
-**关键约定**：
-- 前端 axios 响应拦截器在 `code === 200` 时返回统一响应体 `Result`，业务层再取 `.data`（即 `res.data` 是业务数据）。
-- 下拉选项接口：`getProjectOptions(projectId)`（按项目过滤工程）、`getVersionOptions(applicationId)`（按工程过滤版本）、`getModuleOptions(versionId)`（按版本过滤模块）。
-- 列表/联查接口通过 `@Select` 注解写 JOIN SQL（如接口列表：`tb_api_definition → module → version → application`）。
-- 当前项目存前端 `localStorage.atp_current_project`，路由守卫保证未选项目时先跳 `/project/select`。
-
----
-
-## 六、数据库设计（`db/schema.sql`）
-
-### 已实现表
-
-| 表 | 用途 | 关联 |
+| 表 | 用途 | 状态 |
 | --- | --- | --- |
-| `sys_user` | 用户 | 角色 ADMIN/TESTER/VIEWER |
-| `tb_project` | 项目 | 含 team（团队）、owner_id（负责人） |
-| `tb_application` | 工程 | `project_id` → tb_project |
-| `tb_application_version` | 版本 | `application_id` → tb_application |
-| `tb_application_module` | 模块 | `version_id` → tb_application_version |
-| `tb_api_definition` | 接口定义 | `module_id` → tb_application_module；含 name/method/path/headers/body |
-
-### 预留未实现表
-
-| 表 | 用途 |
-| --- | --- |
-| `tb_test_env` | 环境（域名变量、全局 header、数据库配置） |
-| `tb_test_case` | 用例（关联接口 + 断言 JSON + 前置脚本） |
-| `tb_test_plan` | 测试计划（关联用例 + cron） |
-| `tb_execution` | 执行记录 |
-| `tb_execution_detail` | 执行明细 |
+| `sys_user` | 用户 | ✅ 使用中 |
+| `tb_project` | 项目 | ✅ 使用中 |
+| `tb_application` / `tb_application_version` / `tb_application_module` | 工程 / 版本 / 模块 | ✅ 使用中 |
+| `tb_api_definition` | 接口定义 | ✅ 使用中 |
+| `tb_test_case` | 用例 | ✅ 使用中 |
+| `tb_case_step` | 用例步骤（含 `response_var`、`request_override`、`assertions`） | ✅ 使用中 |
+| `tb_dataset_template` / `tb_dataset_item` | 数据源模板 / 数据项 | ✅ 使用中 |
+| `tb_test_env` | 环境配置 | ✅ 使用中 |
+| `tb_execution` / `tb_execution_detail` | 执行记录 / 明细 | ⬜ **已建表，代码未实现** |
+| `tb_test_plan` | 测试计划 | ⬜ **已建表，代码未实现** |
 
 ### 主键约定
-- **以后新建表用 `IdType.AUTO`（自增）+ 表加 `AUTO_INCREMENT`**。
-- 早期表（`sys_user` 等）用雪花 ID；`tb_application*`、`tb_api_definition` 已改为自增。
-- 全局 `id-type: assign_id`，实体 `@TableId(type=IdType.AUTO)` 优先级更高。
+- **新建表一律用 `IdType.AUTO`（自增）+ 表加 `AUTO_INCREMENT`**。
+- 早期表（`sys_user` 等）为雪花 ID；`tb_application*`、`tb_api_definition` 已改为自增。
+- 全局 `id-type: assign_id`，实体上 `@TableId(type=IdType.AUTO)` 优先级更高。
+- `keys` 是 MySQL 保留字，写 SQL 时必须用反引号 `` `keys` ``。
 
 ---
 
-## 七、当前进度
+## 七、接口清单
 
-### 已完成
-
-| 模块 | 功能 |
-| --- | --- |
-| 用户认证 | 注册、登录、登出、图形验证码、JWT 鉴权、角色体系 |
-| 项目管理 | 项目卡片列表、管理员新增项目、登录后选择项目（localStorage 持久化）、切换项目 |
-| 基础数据 | 工程/版本/模块 的级联查询与新增（弹框三级联动） |
-| 接口定义 | 接口列表级联查询（工程/版本/模块 + 名称/路径）、手动新增（弹框）、Jar 包导入（Spring MVC 注解解析：`@GetMapping` 等提取真实路径和请求方式） |
-
-### 已完成接口清单
-
+### 认证与用户
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/auth/register` | 注册 |
@@ -181,45 +181,129 @@ utils/      auth.ts / token.ts  # token 存取（token.ts 为遗留冗余）
 | GET | `/api/auth/captcha` | 验证码 |
 | GET | `/api/user/info` | 当前用户 |
 | GET | `/api/user/check-username` | 用户名查重 |
+
+### 项目
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
 | GET | `/api/project/list` | 我的项目 |
 | POST | `/api/project` | 新增项目（仅 ADMIN） |
+
+### 基础数据
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
 | GET | `/api/base/project/options` | 工程下拉（按项目） |
 | GET | `/api/base/version/options` | 版本下拉（按工程） |
 | GET | `/api/base/module/options` | 模块下拉（按版本） |
-| POST | `/api/base/project` | 新增工程 |
-| POST | `/api/base/version` | 新增版本 |
-| POST | `/api/base/module` | 新增模块 |
+| POST | `/api/base/project` / `/version` / `/module` | 新增工程/版本/模块 |
 | GET | `/api/base/version/list` | 工程版本信息分页 |
 | GET | `/api/base/api/list` | 接口列表分页 |
 | POST | `/api/base/api` | 新增接口 |
 | POST | `/api/base/api/import` | Jar 包导入接口 |
 
+### 用例
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/case/list` | 用例列表分页 |
+| GET | `/api/case/{id}` | 用例详情 |
+| GET | `/api/case/{caseId}/steps` | 用例步骤 |
+| POST | `/api/case` | 新增用例 |
+| PUT | `/api/case` | 修改用例 |
+| DELETE | `/api/case/{id}` | 删除用例 |
+| PUT | `/api/case/{id}/status` | 启停用例 |
+| POST | `/api/case/import` | **HAR 包导入生成用例**（multipart） |
+
+### 数据源
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/dataset/template/list` | 模板分页 |
+| GET | `/api/dataset/template/{id}` | 模板详情（含字段与数据项） |
+| POST | `/api/dataset/template` | 新增模板 |
+| PUT | `/api/dataset/template` | 修改模板（数据项整体替换） |
+| DELETE | `/api/dataset/template/{id}` | 删除模板（级联删除数据项） |
+
+### 环境
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/env/list` | 环境列表 |
+| POST | `/api/env` | 新增环境 |
+| PUT | `/api/env` | 修改环境 |
+| DELETE | `/api/env/{id}` | 删除环境 |
+
+### 执行
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/execute/case/{caseId}` | 调试执行用例（body: `{envId}`） |
+
 ---
 
-## 八、下一步计划（按规划）
+## 八、核心设计约定
 
-当前处于**第二阶段（中后段）**：项目管理、基础数据（工程/版本/模块）、接口定义已完成，**待补**：
+### 8.1 HAR 导入（`CaseServiceImpl.importHar`）
+1. 解析 HAR 的 `log.entries[]`，URL 去掉协议/域名/端口/query，只留 path。
+2. **敏感 header 在解析入口即剥离**（Authorization / Cookie / Proxy-Authorization，大小写不敏感）。
+3. 按 `module_id + method + path` 预加载已有接口到 Map 去重：
+   - 已存在 → 跳过；
+   - 不存在 → 新增到 `tb_api_definition`，`name` 填空串 `""`，`source_flag` 固定为 `"har包导入"`。
+4. 生成一个 `TestCase`（P2、启用）+ N 个 `CaseStep`，按 `startedDateTime` 排序，默认带状态码断言 `[{"type":"status","expected":N}]`。
+5. 整体 `@Transactional`。
 
-1. **环境管理**（`tb_test_env`）：环境 CRUD，关联项目，维护域名变量/全局 header/数据库配置。
-2. **用例管理**（`tb_test_case`）：用例 CRUD，关联接口 + 断言 JSON + 前置脚本（这是自动化的核心资产）。
-3. **接口定义的参数/请求体模板**：完善 `tb_api_definition` 的 headers/body 编辑（目前仅列表/新增/导入）。
+### 8.2 步骤编排与变量传递
+- 用例 = 多个步骤串行执行，步骤间通过「**响应变量名**」传递参数。
+- 引用语法：`${varName.path}` 从 body 根解析；`${varName.header.x}` 取响应头；`${varName.status}` 取状态码。
+- 「参数提取 extractors」已被响应变量名完整覆盖，前端输入框已移除，后端字段保留兼容旧数据。
+- 执行引擎按数据源行数做**多轮执行**（`loadDatasetRows`），每轮用一行数据替换 `${变量}`。
 
-之后进入第三阶段：
+### 8.3 前端/后端字段映射
+- 前端用例表单用 `caseName`，在 `api/case.ts` 发送时映射为后端 `name`；后端与数据库不改。
+- axios 响应拦截器在 `code === 200` 时返回 `Result`，业务层再取 `.data`。
+- 当前项目存 `localStorage.atp_current_project`，token 存 `localStorage.atp_token`。
 
-| 阶段 | 内容 |
-| --- | --- |
-| 第三阶段 | HTTP 执行引擎、断言校验、测试计划、Cron 调度 |
-| 第四阶段 | 报告中心、图表看板、邮件/企业微信通知 |
-| 第五阶段 | CI 集成、项目级 RBAC、并发执行与性能优化 |
+### 8.4 命名区分
+项目 = `project`、工程 = `application`、版本 = `version`、模块 = `module`、接口 = `api`。
+参数名 `projectId` 指项目、`applicationId` 指工程，避免混淆。
 
 ---
 
-## 九、关键注意事项
+## 九、已知问题与待办
 
-1. **编译后端需 JDK**：本机 mvn 默认走 JDK8 会报「不支持发行版本 17」，须 `export JAVA_HOME=$(/usr/libexec/java_home -v 20)`。
-2. **Redis 非强依赖**：不启动时验证码自动隐藏、token 黑名单降级，不影响登录/鉴权。
-3. **文件上传限制**：已在 `application.yml` 配置 `spring.servlet.multipart` 为 100MB（Jar 包导入需要）。
-4. **LocalDateTime 序列化**：统一 `yyyy-MM-dd HH:mm:ss`（`JacksonConfig`），`spring.jackson.date-format` 只对 `Date` 生效、对 `LocalDateTime` 无效。
-5. **命名区分**：项目 = `project`、工程 = `application`、版本 = `version`、模块 = `module`、接口 = `api`；参数名 `projectId` 表示项目、`applicationId` 表示工程（避免混淆）。
-6. **遗留冗余**：前端 `utils/token.ts` 与 `utils/auth.ts` 重复（实际用 `auth.ts`），可后续清理。
+### 9.1 待修复缺陷
+| 优先级 | 问题 | 位置 |
+| --- | --- | --- |
+| 高 | `DatasetFormDialog` 的 watch 先 `await loadCaseOptions()` 再给 form 赋值；请求挂起时**表单完全不回显** | `views/dataset/components/DatasetFormDialog.vue` |
+| 高 | 编辑弹窗的「关联用例」依赖 `projectStore.currentProject`；数据源管理页无工程上下文，且用例可能属于其他工程 → 下拉为空、只显示裸 `caseId` | 同上 |
+| 中 | `DatasetItemsDialog.loadItems()` 无 `catch`，接口失败静默变空表、无任何提示 | `views/dataset/components/DatasetItemsDialog.vue` |
+| 中 | 数据源管理页缺少「新增数据源」入口，只能从用例编辑页创建 | `views/dataset/index.vue` |
+| 低 | `DatasetItemsDialog` 内 `loading` 变量声明但未绑定 `v-loading` | 同上 |
+| 低 | 前端 `utils/token.ts` 与 `utils/auth.ts` 重复（实际用 `auth.ts`） | `frontend/src/utils/` |
+| 低 | 侧边栏底部标签仍显示「第一阶段」 | `layout/BasicLayout.vue` |
+| 低 | `README.md` 进度描述停留在第一阶段，未同步 | `README.md` |
+
+### 9.2 功能缺口
+- 执行结果不落库：`tb_execution` / `tb_execution_detail` 已建表，缺 Entity/Mapper/Service。
+- 测试计划、Cron 调度、报告中心、图表看板均未实现。
+- 用例列表页无「执行」入口，调试仅能在用例编辑页进行。
+
+---
+
+## 十、开发环境注意事项（重要）
+
+1. **编译后端需 JDK 20**：`export JAVA_HOME=$(/usr/libexec/java_home -v 20)`，否则报「不支持发行版本 17」。
+2. **Vite 开发服务器会假死**（2026-09-12 已复现一次）：
+   - 现象：端口能连上（TCP 握手成功）但 HTTP 无任何响应；页面列表还在（卡死前加载的），弹窗能打开但**所有新请求全部挂起**，表现为「数据不回显」。
+   - 排查：`nc -z 127.0.0.1 5173` 通 + `curl http://127.0.0.1:5173/` 超时即可确认。
+   - 处理：`lsof -ti:5173 | xargs kill -9` 后重新 `npm run dev`，浏览器硬刷新（⌘⇧R）。**改代码无效，别往业务代码里找原因。**
+3. **Redis 非强依赖**：不启动时验证码自动隐藏、token 黑名单降级。
+4. **文件上传限制**：`spring.servlet.multipart` 已配 100MB（Jar / HAR 导入需要）。
+5. **LocalDateTime 序列化**：统一 `yyyy-MM-dd HH:mm:ss`（`JacksonConfig`）；`spring.jackson.date-format` 只对 `Date` 生效，对 `LocalDateTime` 无效。
+6. **`keys` 是 MySQL 保留字**，手写 SQL 必须加反引号。
 7. **开发协作**：本人（开发者）在工作过程中手动编辑过的代码，后续接手者请勿擅自改动；需调整时先沟通确认。
+
+---
+
+## 十一、下一步建议（按优先级）
+
+1. **执行记录落库**：补 `Execution` / `ExecutionDetail` Entity + Mapper，执行后写 `tb_execution` / `tb_execution_detail`，为报告中心打基础。
+2. **报告中心**：基于落库数据做执行明细页 + 通过率图表。
+3. **测试计划 + Cron 调度**：`tb_test_plan` 已建表，补模块与页面。
+4. **修复数据源弹窗缺陷**（第九节 9.1 高优先级两项）。
+5. **用例列表页补「执行」入口**，并支持选择环境。
