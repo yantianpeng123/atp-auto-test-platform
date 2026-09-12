@@ -74,6 +74,18 @@ export const routes: RouteRecordRaw[] = [
         name: 'PlanList',
         component: () => import('@/views/plan/index.vue'),
         meta: { title: '测试计划', icon: 'Timer' }
+      },
+      {
+        path: 'batch',
+        name: 'PlanBatchList',
+        component: () => import('@/views/plan/batch/index.vue'),
+        meta: { title: '定时任务', icon: 'Clock' }
+      },
+      {
+        path: 'batch/:id',
+        name: 'PlanBatchDetail',
+        component: () => import('@/views/plan/batch/detail.vue'),
+        meta: { title: '批次详情', hidden: true }
       }
     ]
   },

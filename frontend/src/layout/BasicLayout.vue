@@ -55,6 +55,10 @@
             <el-icon><Timer /></el-icon>
             <span>测试计划</span>
           </el-menu-item>
+          <el-menu-item index="/batch">
+            <el-icon><Clock /></el-icon>
+            <span>定时任务</span>
+          </el-menu-item>
           <el-menu-item index="/report" disabled>
             <el-icon><DataLine /></el-icon>
             <span>报告中心</span>
@@ -171,7 +175,8 @@ import {
   Switch,
   SwitchButton,
   Timer,
-  VideoPlay
+  VideoPlay,
+  Clock
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useUserStore } from '@/stores/user'
@@ -186,6 +191,7 @@ const tabsStore = useTabsStore()
 
 const activePath = computed(() => {
   if (route.path.startsWith('/case')) return '/case'
+  if (route.path.startsWith('/batch')) return '/batch'
   if (route.path.startsWith('/base')) return route.path
   return route.path
 })
@@ -194,7 +200,7 @@ const defaultOpeneds = computed(() => {
   const path = route.path
   if (path.startsWith('/base')) return ['base']
   if (path.startsWith('/project') || path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
-  if (path.startsWith('/plan') || path.startsWith('/report')) return ['run']
+  if (path.startsWith('/plan') || path.startsWith('/report') || path.startsWith('/batch')) return ['run']
   return []
 })
 
