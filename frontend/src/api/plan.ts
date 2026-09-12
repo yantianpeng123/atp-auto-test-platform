@@ -28,18 +28,20 @@ export interface TestPlanInfo {
   _executing?: boolean
 }
 
-/** 计划查询参数 */
+/** 计划查询参数（projectId 由前端按当前项目注入，实现「项目隔离」） */
 export interface TestPlanQuery {
   name?: string
   enabled?: boolean
+  projectId?: number
   page: number
   size: number
 }
 
-/** 新建/编辑表单 */
+/** 新建/编辑表单（projectId 标记计划归属的项目） */
 export interface TestPlanForm {
   id?: number
   name: string
+  projectId: number
   envId: number
   caseIds: number[]
   cron: string

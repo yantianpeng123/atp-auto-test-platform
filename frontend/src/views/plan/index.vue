@@ -277,6 +277,20 @@ const MOCK_PLANS: TestPlanInfo[] = [
     lastRunTime: null,
     createTime: '',
     updateTime: ''
+  },
+  {
+    id: 3,
+    name: '压测-订单服务',
+    projectId: 2,
+    envId: 1,
+    envName: '测试环境',
+    caseCount: 8,
+    cron: '0 30 1 * * ?',
+    enabled: true,
+    lastRunId: null,
+    lastRunTime: null,
+    createTime: '',
+    updateTime: ''
   }
 ]
 const MOCK_CASES = [
@@ -310,8 +324,11 @@ async function loadCases() {
 async function loadList() {
   loading.value = true
   try {
+    // 项目隔离：仅查询当前项目下的计划
+    const projectId = projectStore.currentProject?.id
     if (USE_MOCK) {
       let data = MOCK_PLANS
+      if (projectId) data = data.filter((p) => p.projectId === projectId)
       if (query.name) {
         const kw = query.name
         data = data.filter((p) => p.name.includes(kw))
@@ -320,7 +337,7 @@ async function loadList() {
       list.value = data
       total.value = data.length
     } else {
-      const res = await (await import('@/api/plan')).getPlanList(query)
+      const res = await (await import('@/api/plan')).getPlanList({ ...query, projectId })
       list.value = res.records
       total.value = res.total
     }
@@ -414,6 +431,7 @@ async function handleSubmit() {
       const payload = {
         id: form.id,
         name: form.name,
+        projectId: projectStore.currentProject?.id ?? 0,
         envId: form.envId!,
         caseIds: form.caseIds,
         cron: form.cron,
