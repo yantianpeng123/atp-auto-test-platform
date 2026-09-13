@@ -201,12 +201,13 @@ import type {
   TestPlanInfo,
   TestPlanQuery
 } from '@/api/plan'
+import { getPlanCaseOptions } from '@/api/plan'
 
 /**
- * ⚠️ 后端 TestPlan 模块尚未实现。此处以本地 mock 驱动页面演示；
- *    后端就绪后把 USE_MOCK 改为 false，页面自动切换到 @/api/plan 真实接口。
+ * 后端 TestPlan 模块已落地，默认走 @/api/plan 真实接口。
+ * 如需本地纯演示可临时改回 true。
  */
-const USE_MOCK = true
+const USE_MOCK = false
 
 const projectStore = useProjectStore()
 
@@ -317,8 +318,12 @@ async function loadEnv() {
 }
 
 async function loadCases() {
-  // 后端就绪后改为：caseOptions.value = await getPlanCaseOptions(projectStore.currentProject.id)
-  caseOptions.value = MOCK_CASES
+  if (USE_MOCK) {
+    caseOptions.value = MOCK_CASES
+  } else {
+    const pid = projectStore.currentProject?.id
+    if (pid) caseOptions.value = await getPlanCaseOptions(pid)
+  }
 }
 
 async function loadList() {

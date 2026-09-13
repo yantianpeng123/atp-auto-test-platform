@@ -42,6 +42,9 @@ public enum ResultCode {
     ENV_NAME_EXISTS(2102, "同一项目下环境名称已存在"),
     CASE_NOT_FOUND(3001, "用例不存在"),
 
+    PLAN_NOT_FOUND(3101, "测试计划不存在"),
+    CASE_LINKED(3102, "用例不存在或不属于当前项目"),
+
     API_NAME_EXISTS(4001,"请求路径和请求方式已存在"),
 
 

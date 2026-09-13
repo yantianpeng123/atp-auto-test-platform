@@ -1,9 +1,8 @@
 /**
  * 测试计划 - 接口层（对接后端 /api/plan/**）
  *
- * ⚠️ 当前后端 TestPlan 模块尚未实现，前端骨架以本地 mock 驱动
- *    （见 views/plan/index.vue 顶部的 USE_MOCK 开关）。
- *    后端就绪后：将 USE_MOCK 改为 false 即可自动切换到本文件真实接口。
+ * 后端 TestPlan 模块已落地，views/plan/index.vue 的 USE_MOCK 已置为 false，
+ * 页面默认走本文件真实接口。
  */
 import request from './request'
 import type { Result, PageResult } from './types'

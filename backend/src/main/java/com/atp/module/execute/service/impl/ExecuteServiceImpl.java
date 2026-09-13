@@ -152,7 +152,7 @@ public class ExecuteServiceImpl implements ExecuteService {
         // ============ 持久化执行记录（头表 + 每轮每步明细 + 断言） ============
         // 调试运行不落库，仅正式「执行」才记录
         if (!Boolean.TRUE.equals(request.getDebug())) {
-            persistExecution(caseId, testCase, env, vo, duration);
+            persistExecution(caseId, testCase, env, vo, duration, request.getPlanId());
         }
 
         return vo;
@@ -406,15 +406,16 @@ public class ExecuteServiceImpl implements ExecuteService {
 
     /** 将一次执行结果落库：头表 + 每轮每步明细 + 每条断言 */
     private void persistExecution(Long caseId, TestCase testCase, TestEnv env,
-                                  CaseExecuteVO vo, long duration) {
+                                  CaseExecuteVO vo, long duration, Long planId) {
         LocalDateTime start = LocalDateTime.now();
         Execution exec = new Execution();
         exec.setProjectId(testCase.getProjectId());
+        exec.setPlanId(planId);
         exec.setCaseId(caseId);
         exec.setCaseName(testCase.getName());
         exec.setEnvId(env.getId());
         exec.setEnvName(env.getName());
-        exec.setTriggerType("MANUAL");
+        exec.setTriggerType(planId != null ? "SCHEDULED" : "MANUAL");
         exec.setExecutorId(currentUserId());
         exec.setStatus(vo.getStatus());
         exec.setTotalRounds(vo.getTotalRounds());
