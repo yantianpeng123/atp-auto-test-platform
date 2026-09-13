@@ -86,6 +86,18 @@ export const routes: RouteRecordRaw[] = [
         name: 'PlanBatchDetail',
         component: () => import('@/views/plan/batch/detail.vue'),
         meta: { title: '批次详情', hidden: true }
+      },
+      {
+        path: 'execution/:id',
+        name: 'ExecutionReport',
+        component: () => import('@/views/execute/report.vue'),
+        meta: { title: '执行报告', hidden: true }
+      },
+      {
+        path: 'report',
+        name: 'ReportCenter',
+        component: () => import('@/views/execute/reportCenter.vue'),
+        meta: { title: '报告中心', icon: 'DataLine' }
       }
     ]
   },

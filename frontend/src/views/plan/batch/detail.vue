@@ -375,8 +375,11 @@ async function handleExecute() {
 }
 
 function viewExecution(item: PlanBatchRunItem) {
-  // executionId 指向 tb_execution，可执行记录查看页（前端报告页待补充），先提示
-  ElMessage.info(`执行报告 executionId=${item.executionId}（报告查看页前端待补充）`)
+  if (item.executionId) {
+    router.push(`/execution/${item.executionId}`)
+  } else {
+    ElMessage.warning('该计划本次运行暂无关联报告')
+  }
 }
 
 function viewRun(run: PlanBatchRun) {

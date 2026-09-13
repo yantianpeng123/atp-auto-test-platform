@@ -1,6 +1,6 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-12
+> 更新时间：2026-09-14
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
 
@@ -62,8 +62,8 @@
 | --- | --- | --- |
 | 第一阶段 | 架构 + JWT 鉴权 + 登录注册 + 项目管理 | ✅ 完成 |
 | 第二阶段 | 基础数据（工程/版本/模块）+ 接口定义 | ✅ 完成 |
-| **第三阶段** | **用例管理 + 步骤编排 + 执行引擎 + 数据源** | **🔶 主体完成，报告/计划未做** |
-| 第四阶段 | 报告中心、图表看板、通知 | ⬜ 未开始 |
+| 第三阶段 | **用例管理 + 步骤编排 + 执行引擎 + 数据源 + 测试计划** | ✅ 完成 |
+| 第四阶段 | 定时任务批次、**报告中心（前端）**、图表看板、通知 | 🔶 批次/报告前端完成（mock），后端报告接口待补 |
 | 第五阶段 | CI 集成、项目级 RBAC、并发执行 | ⬜ 未开始 |
 
 ### 4.1 已完成模块
@@ -77,16 +77,19 @@
 | 用例管理 | ✅ | ✅ | 用例 CRUD、状态启停、**多步骤串行编排**、**HAR 导入** |
 | 数据源管理 | ✅ | ✅ | 数据源模板 CRUD、字段(key) 定义、**数据项多行编辑** |
 | 执行引擎 | ✅ | ✅（调试入口） | HTTP 执行、变量解析、断言引擎、多轮数据驱动 |
+| 测试计划 | ✅ | ✅ | 计划 CRUD、关联用例、Cron 调度、启停、手动执行；项目隔离 + 同名校验 |
+| 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
+| 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
+| 执行报告/报告中心 | ⬜（接口 TODO） | ✅（mock） | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，前端 mock 渲染，后端接口待补 |
 
 ### 4.2 尚未实现
 
-- **测试计划**（`tb_test_plan` 表已建，后端模块与页面均无）
-- **执行记录落库**（`tb_execution` / `tb_execution_detail` 表已建，**无 Entity/Mapper**，执行结果仅返回 VO 不持久化）
-- **报告中心 / 图表看板**
-- **Cron 调度**
-- **CI 集成、项目级 RBAC**
+- **报告中心后端接口**：前端报告页/列表已用 mock 渲染，后端缺 `GET /api/execute/{executionId}`（报告详情）与 `GET /api/execute/list`（报告列表），替换点已在 `api/execute.ts` 标注 TODO。
+- **执行报告"重跑"精度**：报告页"失败重试"当前降级为整用例重跑（调 `executeCase`），精确单步重跑需执行引擎后续支持。
+- **批次执行异步化**：`executeBatch` 当前为同步执行（HTTP 返回即跑完），长批次可能超时，建议改"立即返回 runId + 后台异步"。
+- **图表看板、通知、CI 集成、项目级 RBAC、并发执行** 均未开始。
 
-前端菜单中「测试计划」「报告中心」为 `disabled` 占位态。
+前端菜单现状：「测试计划」「定时任务」「报告中心」均已启用（非 disabled）。
 
 ---
 
@@ -114,7 +117,8 @@ module/
   env/        (8)   环境配置
   testcase/   (19)  用例 + 步骤 + HAR 导入
   dataset/    (7)   数据源模板与数据项
-  execute/    (13)  执行引擎（HTTP/断言/变量解析）
+  execute/    (16)  执行引擎（HTTP/断言/变量解析）+ Execution/ExecutionDetail/ExecutionAssertion 落库
+  plan/       (28)  测试计划（TestPlan/TestPlanCase）+ 定时任务批次（PlanBatch* 4 表/4 Mapper/VO/Service）+ PlanScheduler + PlanBatchScheduler
 ```
 
 **分层约定**（每个 module 内）：`controller`（参数校验 + 结果装配）→ `service`/`impl`（业务编排、`@Transactional` 只在此层）→ `mapper`（数据访问）；另有 `entity`（与表一一对应）、`dto`（入参）、`vo`（出参）。
@@ -140,6 +144,13 @@ views/
   case/edit.vue          用例编辑（**多步骤串行编排**，约 1600 行）
   dataset/               数据源管理（列表 + 数据项 + 编辑）
   dataset/components/    DatasetItemsDialog / DatasetFormDialog / DatasetSelectDialog
+  plan/index.vue         测试计划列表（CRUD/关联用例/Cron/启停/执行）
+  plan/batch/index.vue   定时任务批次列表
+  plan/batch/detail.vue  批次详情（执行看板/运行历史/计划排序）
+  execute/report.vue     执行报告详情（V2：轮次分组/仅看失败/JSON 美化/重试）
+  execute/reportCenter.vue 报告中心列表（搜索/筛选/分页）
+components/
+  JsonTree.vue           JSON 树形美化（key/value 着色 + 折叠）
 utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ```
 
@@ -147,7 +158,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 六、数据库设计
 
-### 已建表（15 张）
+### 已建表（20 张）
 
 | 表 | 用途 | 状态 |
 | --- | --- | --- |
@@ -159,8 +170,10 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | `tb_case_step` | 用例步骤（含 `response_var`、`request_override`、`assertions`） | ✅ 使用中 |
 | `tb_dataset_template` / `tb_dataset_item` | 数据源模板 / 数据项 | ✅ 使用中 |
 | `tb_test_env` | 环境配置 | ✅ 使用中 |
-| `tb_execution` / `tb_execution_detail` | 执行记录 / 明细 | ⬜ **已建表，代码未实现** |
-| `tb_test_plan` | 测试计划 | ⬜ **已建表，代码未实现** |
+| `tb_test_plan` / `tb_plan_case` | 测试计划 / 计划关联用例 | ✅ 使用中 |
+| `tb_execution` / `tb_execution_detail` / `tb_execution_assertion` | 执行记录 / 明细 / 断言 | ✅ 使用中（execute 模块落库） |
+| `tb_plan_batch` / `tb_plan_batch_item` | 批次 / 批次关联计划 | ✅ 使用中 |
+| `tb_plan_batch_run` / `tb_plan_batch_run_item` | 批次运行实例 / 运行项 | ✅ 使用中 |
 
 ### 主键约定
 - **新建表一律用 `IdType.AUTO`（自增）+ 表加 `AUTO_INCREMENT`**。
@@ -232,7 +245,31 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ### 执行
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/execute/case/{caseId}` | 调试执行用例（body: `{envId}`） |
+| POST | `/api/execute/case/{caseId}` | 调试执行用例（body: `{envId, debug, planId}`） |
+| GET | `/api/execute/history/{caseId}` | 查询用例最近一次执行记录（持久化，刷新不丢） |
+
+### 测试计划
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/plan/list` | 计划分页（projectId/name/enabled 过滤） |
+| POST | `/api/plan` | 新建计划（含关联 caseIds） |
+| PUT | `/api/plan` | 修改计划 |
+| DELETE | `/api/plan/{id}` | 删除计划 |
+| PUT | `/api/plan/{id}/enabled` | 启/停用计划 |
+| POST | `/api/plan/{id}/execute` | 按计划执行（返回 PlanExecuteResult） |
+
+### 定时任务批次
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/plan/batch/list` | 批次分页（projectId/name/enabled 过滤） |
+| POST | `/api/plan/batch` | 新建批次（含关联 planIds、strategy、cron） |
+| PUT | `/api/plan/batch` | 修改批次 |
+| DELETE | `/api/plan/batch/{id}` | 删除批次 |
+| PUT | `/api/plan/batch/{id}/enabled` | 启/停用批次 |
+| POST | `/api/plan/batch/{id}/execute` | 立即执行批次（triggerType=MANUAL） |
+| GET | `/api/plan/batch/{id}` | 批次详情（含关联计划） |
+| GET | `/api/plan/batch/{id}/runs` | 批次运行历史 |
+| GET | `/api/plan/batch/run/{runId}` | 某次运行实时状态（前端轮询） |
 
 ---
 
@@ -279,9 +316,12 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | 低 | `README.md` 进度描述停留在第一阶段，未同步 | `README.md` |
 
 ### 9.2 功能缺口
-- 执行结果不落库：`tb_execution` / `tb_execution_detail` 已建表，缺 Entity/Mapper/Service。
-- 测试计划、Cron 调度、报告中心、图表看板均未实现。
+- 报告中心**后端接口**待补（见 4.2）：详情 `GET /api/execute/{executionId}` + 列表 `GET /api/execute/list`。
+- 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
+- 报告页"失败重试"精度（当前整用例重跑降级）。
+- 图表看板、通知、CI 集成、项目级 RBAC、并发执行均未开始。
 - 用例列表页无「执行」入口，调试仅能在用例编辑页进行。
+- 数据源弹窗缺陷见 9.1（高优先级两项仍待修）。
 
 ---
 
@@ -302,8 +342,8 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 十一、下一步建议（按优先级）
 
-1. **执行记录落库**：补 `Execution` / `ExecutionDetail` Entity + Mapper，执行后写 `tb_execution` / `tb_execution_detail`，为报告中心打基础。
-2. **报告中心**：基于落库数据做执行明细页 + 通过率图表。
-3. **测试计划 + Cron 调度**：`tb_test_plan` 已建表，补模块与页面。
-4. **修复数据源弹窗缺陷**（第九节 9.1 高优先级两项）。
-5. **用例列表页补「执行」入口**，并支持选择环境。
+1. **报告中心后端接口**：补 `GET /api/execute/{executionId}` + `GET /api/execute/list`（组装逻辑可复用 `ExecuteServiceImpl.getLatestExecution` 现有 detail/assertion→VO 代码），替换前端 `api/execute.ts` 两处 TODO，报告页即由 mock 切真数据。
+2. **批次执行异步化**：`executeBatch` 改为"立即返回 runId + 后台线程执行"，避免长批次 HTTP 超时。
+3. **修复数据源弹窗缺陷**（第九节 9.1 高优先级两项）。
+4. **用例列表页补「执行」入口**，并支持选择环境。
+5. **图表看板 / 通知 / CI 集成 / 项目级 RBAC / 并发执行**（长期规划）。

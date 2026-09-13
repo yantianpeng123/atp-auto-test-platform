@@ -59,7 +59,7 @@
             <el-icon><Clock /></el-icon>
             <span>定时任务</span>
           </el-menu-item>
-          <el-menu-item index="/report" disabled>
+          <el-menu-item index="/report">
             <el-icon><DataLine /></el-icon>
             <span>报告中心</span>
           </el-menu-item>
