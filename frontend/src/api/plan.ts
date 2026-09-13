@@ -99,14 +99,15 @@ export function togglePlanEnabled(id: number, enabled: boolean): Promise<null> {
 
 /**
  * 拉取「关联用例」候选项（按项目过滤）。
- * 后端未单独提供时，复用用例列表接口；此处占位实现。
+ * 后端 /case/list 返回 Result<PageResult<CaseVO>>，需取 data.records；
+ * CaseVO 本身含 id/name 字段，可直接用作候选项。
  */
 export function getPlanCaseOptions(projectId: number): Promise<{ id: number; name: string }[]> {
   return request
-    .get<unknown, Result<{ id: number; name: string }[]>>('/case/list', {
+    .get<unknown, Result<PageResult<{ id: number; name: string }>>>('/case/list', {
       params: { projectId, page: 1, size: 200 }
     })
-    .then((res) => res.data)
+    .then((res) => res.data.records)
 }
 
 /** 按计划执行 */

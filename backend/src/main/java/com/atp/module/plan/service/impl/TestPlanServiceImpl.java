@@ -110,6 +110,15 @@ public class TestPlanServiceImpl implements TestPlanService {
 
     @Override
     public void create(TestPlanForm form) {
+        // 同一项目下不允许重名
+        long exists = testPlanMapper.selectCount(
+                new QueryWrapper<TestPlan>()
+                        .eq("project_id", form.getProjectId())
+                        .eq("name", form.getName()));
+        if (exists > 0) {
+            throw new BizException(ResultCode.PLAN_NAME_EXISTS);
+        }
+
         TestPlan plan = new TestPlan();
         plan.setProjectId(form.getProjectId());
         plan.setName(form.getName());
@@ -128,6 +137,15 @@ public class TestPlanServiceImpl implements TestPlanService {
         TestPlan plan = testPlanMapper.selectById(form.getId());
         if (plan == null) {
             throw new BizException(ResultCode.PLAN_NOT_FOUND);
+        }
+        // 同一项目下不允许与其他计划重名（排除自身）
+        long exists = testPlanMapper.selectCount(
+                new QueryWrapper<TestPlan>()
+                        .eq("project_id", form.getProjectId())
+                        .eq("name", form.getName())
+                        .ne("id", form.getId()));
+        if (exists > 0) {
+            throw new BizException(ResultCode.PLAN_NAME_EXISTS);
         }
         plan.setProjectId(form.getProjectId());
         plan.setName(form.getName());
