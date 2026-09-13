@@ -219,8 +219,7 @@ CREATE TABLE `tb_plan_case`
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_plan_case` (`plan_id`, `case_id`),
     KEY `idx_plan` (`plan_id`)
-) ENGINE = InnoDB
-  DEFAULT CHARSET = utf8mb4 COMMENT ='计划用例关联表';
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='计划用例关联表';
 
 -- 用例步骤表（第二阶段扩展：多接口串行+参数传递）
 DROP TABLE IF EXISTS `tb_case_step`;

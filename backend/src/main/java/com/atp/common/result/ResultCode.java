@@ -47,7 +47,7 @@ public enum ResultCode {
     PLAN_NAME_EXISTS(3103, "测试计划名称已存在"),
 
     BATCH_NOT_FOUND(3201, "定时任务批次不存在"),
-
+    BATCH_NAME_EXISTS(3201,"定时任务已存在"),
     API_NAME_EXISTS(4001,"请求路径和请求方式已存在"),
 
 

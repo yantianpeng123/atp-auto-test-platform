@@ -105,6 +105,15 @@ public class PlanBatchServiceImpl implements PlanBatchService {
 
     @Override
     public void create(PlanBatchForm form) {
+
+        //新增根据项目id和名称 无法新增
+       long exist= planBatchMapper.selectCount(new QueryWrapper<PlanBatch>()
+                .eq("project_id",form.getProjectId())
+                .eq("name",form.getName()));
+       if(exist>0){
+           throw new BizException(ResultCode.PLAN_NAME_EXISTS);
+       }
+
         PlanBatch b = new PlanBatch();
         b.setProjectId(form.getProjectId());
         b.setName(form.getName());
@@ -126,6 +135,16 @@ public class PlanBatchServiceImpl implements PlanBatchService {
         if (b == null) {
             throw new BizException(ResultCode.BATCH_NOT_FOUND);
         }
+        long exist= planBatchMapper.selectCount(new QueryWrapper<PlanBatch>()
+                .eq("project_id",form.getProjectId())
+                .eq("name",form.getName())
+                .ne("id",form.getId()));
+        if(exist>0){
+            throw new BizException(ResultCode.BATCH_NAME_EXISTS);
+        }
+
+
+
         b.setProjectId(form.getProjectId());
         b.setName(form.getName());
         b.setStrategy(normalizeStrategy(form.getStrategy()));
