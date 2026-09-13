@@ -363,3 +363,89 @@ CREATE TABLE `tb_execution_assertion`
     KEY `idx_execution` (`execution_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='断言结果表';
+
+-- =============================================
+-- 第四阶段：定时任务批次（Batch）
+-- 一个批次编排多个测试计划，可定时 / 手动批量执行
+-- =============================================
+
+-- 批次头表（批次定义 + 启用状态 + 定时表达式）
+DROP TABLE IF EXISTS `tb_plan_batch`;
+CREATE TABLE `tb_plan_batch`
+(
+    `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `project_id`      BIGINT       NOT NULL COMMENT '项目ID（项目隔离）',
+    `name`            VARCHAR(100) NOT NULL COMMENT '批次名称',
+    `strategy`        VARCHAR(16)  DEFAULT 'SERIAL' COMMENT '执行策略 SERIAL/PARALLEL',
+    `fail_continue`   TINYINT      DEFAULT 0 COMMENT '串行时失败后是否继续 0-否 1-是',
+    `max_concurrency` INT          DEFAULT 3 COMMENT '并行最大并发数',
+    `cron`            VARCHAR(100) DEFAULT NULL COMMENT 'Cron 表达式（NULL/空表示不定时）',
+    `enabled`         TINYINT      DEFAULT 0 COMMENT '0-关闭 1-启用定时',
+    `last_run_id`     BIGINT       DEFAULT NULL COMMENT '最近一次运行实例ID',
+    `create_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`         TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-未删 1-已删',
+    PRIMARY KEY (`id`),
+    KEY `idx_project` (`project_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='定时任务批次头表';
+
+-- 批次-计划关联表（无 deleted 列：物理删除，重建关联时直接清掉旧数据）
+DROP TABLE IF EXISTS `tb_plan_batch_item`;
+CREATE TABLE `tb_plan_batch_item`
+(
+    `id`         BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `batch_id`   BIGINT NOT NULL COMMENT '批次ID',
+    `plan_id`    BIGINT NOT NULL COMMENT '测试计划ID',
+    `sort_order` INT    DEFAULT 0 COMMENT '执行顺序',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_batch_plan` (`batch_id`, `plan_id`),
+    KEY `idx_batch` (`batch_id`),
+    KEY `idx_plan` (`plan_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='批次计划关联表';
+
+-- 批次运行实例表（一次运行的汇总）
+DROP TABLE IF EXISTS `tb_plan_batch_run`;
+CREATE TABLE `tb_plan_batch_run`
+(
+    `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `batch_id`     BIGINT       NOT NULL COMMENT '批次ID',
+    `trigger_type` VARCHAR(16)  DEFAULT 'MANUAL' COMMENT '触发方式 MANUAL/SCHEDULED',
+    `status`       VARCHAR(16)  DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/PARTIAL_FAILED/FAILED',
+    `total`        INT          DEFAULT 0 COMMENT '计划总数',
+    `passed`       INT          DEFAULT 0 COMMENT '成功数',
+    `failed`       INT          DEFAULT 0 COMMENT '失败数（含被跳过）',
+    `running`      INT          DEFAULT 0 COMMENT '进行中数',
+    `queued`       INT          DEFAULT 0 COMMENT '排队中数',
+    `start_time`   DATETIME     DEFAULT NULL COMMENT '开始时间',
+    `end_time`     DATETIME     DEFAULT NULL COMMENT '结束时间',
+    `duration_ms`  BIGINT       DEFAULT 0 COMMENT '耗时毫秒',
+    `create_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_batch` (`batch_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='批次运行实例表';
+
+-- 批次运行明细表（每个计划的执行结果；execution_id 复用 tb_execution）
+DROP TABLE IF EXISTS `tb_plan_batch_run_item`;
+CREATE TABLE `tb_plan_batch_run_item`
+(
+    `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `run_id`       BIGINT       NOT NULL COMMENT '运行实例ID',
+    `plan_id`      BIGINT       NOT NULL COMMENT '计划ID',
+    `plan_name`    VARCHAR(100) DEFAULT NULL COMMENT '计划名称快照',
+    `sort_order`   INT          DEFAULT 0 COMMENT '顺序快照',
+    `status`       VARCHAR(16)  DEFAULT 'QUEUED' COMMENT 'QUEUED/RUNNING/SUCCESS/FAILED/SKIPPED',
+    `execution_id` BIGINT       DEFAULT NULL COMMENT '关联执行记录ID（复用 tb_execution）',
+    `duration_ms`  BIGINT       DEFAULT NULL COMMENT '耗时毫秒',
+    `error_msg`    TEXT         DEFAULT NULL COMMENT '失败原因',
+    `start_time`   DATETIME     DEFAULT NULL COMMENT '开始时间',
+    `end_time`     DATETIME     DEFAULT NULL COMMENT '结束时间',
+    `create_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_run` (`run_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='批次运行明细表';

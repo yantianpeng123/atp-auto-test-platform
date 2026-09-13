@@ -1,15 +1,19 @@
 /**
  * 定时任务（批次） - 接口层（对接后端 /api/plan/batch/**）
  *
- * ⚠️ 当前后端 PlanBatch 模块尚未实现，前端骨架以本地 mock 驱动
- *    （见 views/plan/batch/* 顶部的 USE_MOCK 开关）。
- *    后端就绪后：将 USE_MOCK 改为 false 即可自动切换到本文件真实接口。
+ * 后端 PlanBatch 模块已实现，前端 USE_MOCK=false 即走真实接口。
  */
 import request from './request'
 import type { Result, PageResult } from './types'
 
 /** 执行策略 */
 export type BatchStrategy = 'SERIAL' | 'PARALLEL'
+/** 关联计划简档 */
+export interface PlanBrief {
+  id: number
+  name: string
+  sortOrder: number
+}
 /** 运行触发方式 */
 export type RunTriggerType = 'MANUAL' | 'SCHEDULED'
 /** 运行/批次状态 */
@@ -32,6 +36,8 @@ export interface PlanBatchInfo {
   lastRunStatus: RunStatus | null
   createTime: string
   updateTime: string
+  // —— 关联计划（详情接口返回，列表接口为 undefined）——
+  plans?: PlanBrief[]
   // —— UI 临时态字段（非后端字段）——
   _toggling?: boolean
   _executing?: boolean
@@ -95,6 +101,13 @@ export interface PlanBatchRun {
 export function getBatchList(query: PlanBatchQuery): Promise<PageResult<PlanBatchInfo>> {
   return request
     .get<unknown, Result<PageResult<PlanBatchInfo>>>('/plan/batch/list', { params: query })
+    .then((res) => res.data)
+}
+
+/** 批次详情（含关联计划） */
+export function getBatchDetail(id: number): Promise<PlanBatchInfo> {
+  return request
+    .get<unknown, Result<PlanBatchInfo>>(`/plan/batch/${id}`)
     .then((res) => res.data)
 }
 

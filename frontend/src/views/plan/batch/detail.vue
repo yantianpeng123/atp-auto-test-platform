@@ -262,6 +262,10 @@ import {
   VideoPlay
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
+import {
+  getBatchDetail,
+  getBatchRuns
+} from '@/api/planBatch'
 import type {
   PlanBatchInfo,
   PlanBatchRun,
@@ -271,11 +275,10 @@ import type {
 } from '@/api/planBatch'
 
 /**
- * ⚠️ 后端 PlanBatch 模块尚未实现。此处以本地 mock 驱动演示；
- *    后端就绪后把 USE_MOCK 改为 false，并把 mockRun 轮询逻辑替换为
- *    每 3 秒调用 getBatchRun(runId) 拉取真实状态。
+ * 后端 PlanBatch 模块已实现，USE_MOCK=false 走真实接口（@/api/planBatch）。
+ * 真实模式下：loadBatch 拉取批次详情与运行历史；执行后每 3 秒轮询 getBatchRun 刷新看板。
  */
-const USE_MOCK = true
+const USE_MOCK = false
 
 const route = useRoute()
 const router = useRouter()
@@ -406,17 +409,36 @@ onMounted(() => {
 
 onBeforeUnmount(() => stopPolling())
 
-function loadBatch() {
-  const base = MOCK_BATCH_MAP[batchId]
-  if (!base) {
-    batch.value = null
+async function loadBatch() {
+  if (USE_MOCK) {
+    const base = MOCK_BATCH_MAP[batchId]
+    if (!base) {
+      batch.value = null
+      return
+    }
+    batch.value = { ...base, projectId: projectStore.currentProject?.id || 1 }
+    planItems.value = MOCK_PLANS.map((p, i) => ({ id: p.id, name: p.name, sortOrder: i + 1 }))
+    // mock：为每个批次造一条最近运行历史
+    runHistory.value = [buildMockRun(batch.value, batch.value.lastRunStatus as RunStatus | null, true)]
+    currentRun.value = runHistory.value[0]
     return
   }
-  batch.value = { ...base, projectId: projectStore.currentProject?.id || 1 }
-  planItems.value = MOCK_PLANS.map((p, i) => ({ id: p.id, name: p.name, sortOrder: i + 1 }))
-  // mock：为每个批次造一条最近运行历史
-  runHistory.value = [buildMockRun(batch.value, batch.value.lastRunStatus as RunStatus | null, true)]
-  currentRun.value = runHistory.value[0]
+
+  // 真实模式：拉取批次详情 + 运行历史
+  const info = await getBatchDetail(batchId)
+  batch.value = info
+  planItems.value = (info.plans || []).map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder }))
+  const runs = await getBatchRuns(batchId)
+  runHistory.value = runs
+  if (runs.length > 0) {
+    currentRun.value = runs[0]
+    if (currentRun.value.status === 'RUNNING') {
+      executing.value = true
+      startPolling()
+    }
+  } else {
+    currentRun.value = null
+  }
 }
 
 function buildMockRun(
@@ -589,7 +611,8 @@ function handleExecute() {
       currentRun.value = run
       runHistory.value = [run, ...runHistory.value]
       executing.value = false
-      startPolling()
+      // 后端 executeBatch 为同步执行，正常返回即已完成；若返回 RUNNING（如被调度接管）才轮询
+      if (run.status === 'RUNNING') startPolling()
     })
   }
 }
@@ -635,7 +658,8 @@ function rerunItem(item: PlanBatchRunItem) {
 }
 
 function viewExecution(item: PlanBatchRunItem) {
-  ElMessage.info(`跳转到执行报告（executionId=${item.executionId}），后端接口待对接`)
+  // executionId 指向 tb_execution，可执行记录查看页（前端报告页待补充），先提示
+  ElMessage.info(`执行报告 executionId=${item.executionId}（报告查看页前端待补充）`)
 }
 
 function viewRun(run: PlanBatchRun) {

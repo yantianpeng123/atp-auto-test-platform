@@ -184,10 +184,9 @@ import type {
 } from '@/api/planBatch'
 
 /**
- * ⚠️ 后端 PlanBatch 模块尚未实现。此处以本地 mock 驱动页面演示；
- *    后端就绪后把 USE_MOCK 改为 false，页面自动切换到 @/api/planBatch 真实接口。
+ * 后端 PlanBatch 模块已实现，USE_MOCK=false 走真实接口（@/api/planBatch）。
  */
-const USE_MOCK = true
+const USE_MOCK = false
 
 const router = useRouter()
 const projectStore = useProjectStore()
