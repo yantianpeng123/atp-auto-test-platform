@@ -177,16 +177,16 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, Edit, Plus, Refresh, Search, VideoPlay, View } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
-import type {
-  BatchStrategy,
-  PlanBatchInfo,
-  PlanBatchQuery
+import {
+  createBatch,
+  deleteBatch,
+  executeBatch,
+  getBatchList,
+  toggleBatchEnabled,
+  updateBatch
 } from '@/api/planBatch'
-
-/**
- * 后端 PlanBatch 模块已实现，USE_MOCK=false 走真实接口（@/api/planBatch）。
- */
-const USE_MOCK = false
+import type { BatchStrategy, PlanBatchInfo, PlanBatchQuery } from '@/api/planBatch'
+import { getPlanList } from '@/api/plan'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -229,79 +229,8 @@ const rules: FormRules<BatchFormState> = {
   planIds: [{ required: true, message: '请至少选择一个测试计划', trigger: 'change' }]
 }
 
-/* ----------------- mock 演示数据 ----------------- */
-const MOCK_PLANS = [
-  { id: 1, name: '登录与鉴权用例组' },
-  { id: 2, name: '订单核心链路' },
-  { id: 3, name: '支付回调校验' },
-  { id: 4, name: '消息通知链路' },
-  { id: 5, name: '报表导出校验' }
-]
-const MOCK_BATCHES: PlanBatchInfo[] = [
-  {
-    id: 1,
-    projectId: 1,
-    name: '每日回归批次',
-    strategy: 'PARALLEL',
-    failContinue: true,
-    maxConcurrency: 3,
-    cron: '0 0 2 * * ?',
-    enabled: true,
-    lastRunId: 1009,
-    lastRunTime: '2026-09-12 02:00:12',
-    lastRunStatus: 'PARTIAL_FAILED',
-    createTime: '',
-    updateTime: ''
-  },
-  {
-    id: 2,
-    projectId: 1,
-    name: '冒烟测试批次',
-    strategy: 'SERIAL',
-    failContinue: false,
-    maxConcurrency: 1,
-    cron: '0 30 9 * * ?',
-    enabled: false,
-    lastRunId: null,
-    lastRunTime: null,
-    lastRunStatus: null,
-    createTime: '',
-    updateTime: ''
-  },
-  {
-    id: 3,
-    projectId: 1,
-    name: '接口全量校验',
-    strategy: 'PARALLEL',
-    failContinue: true,
-    maxConcurrency: 2,
-    cron: '0 0 1 * * ?',
-    enabled: true,
-    lastRunId: 1005,
-    lastRunTime: '2026-09-11 01:00:00',
-    lastRunStatus: 'SUCCESS',
-    createTime: '',
-    updateTime: ''
-  },
-  {
-    id: 4,
-    projectId: 1,
-    name: '核心链路巡检',
-    strategy: 'SERIAL',
-    failContinue: false,
-    maxConcurrency: 1,
-    cron: '0 0 4 * * ?',
-    enabled: false,
-    lastRunId: null,
-    lastRunTime: null,
-    lastRunStatus: null,
-    createTime: '',
-    updateTime: ''
-  }
-]
-
 onMounted(async () => {
-  planOptions.value = MOCK_PLANS
+  await loadPlans()
   await loadList()
 })
 
@@ -309,22 +238,25 @@ function runStatusText(s: string): string {
   return s === 'SUCCESS' ? '成功' : s === 'PARTIAL_FAILED' ? '部分失败' : s === 'FAILED' ? '失败' : '进行中'
 }
 
+/** 关联计划下拉：按当前项目拉取真实测试计划 */
+async function loadPlans() {
+  const pid = projectStore.currentProject?.id
+  if (!pid) return
+  try {
+    const res = await getPlanList({ name: '', enabled: undefined, projectId: pid, page: 1, size: 200 })
+    planOptions.value = res.records.map((p) => ({ id: p.id, name: p.name }))
+  } catch {
+    planOptions.value = []
+  }
+}
+
 async function loadList() {
   loading.value = true
   try {
     const projectId = projectStore.currentProject?.id
-    if (USE_MOCK) {
-      let data = MOCK_BATCHES
-      if (projectId) data = data.filter((b) => b.projectId === projectId)
-      if (query.name) data = data.filter((b) => b.name.includes(query.name!))
-      if (query.enabled !== undefined) data = data.filter((b) => b.enabled === query.enabled)
-      list.value = data
-      total.value = data.length
-    } else {
-      const res = await (await import('@/api/planBatch')).getBatchList({ ...query, projectId })
-      list.value = res.records
-      total.value = res.total
-    }
+    const res = await getBatchList({ ...query, projectId })
+    list.value = res.records
+    total.value = res.total
   } finally {
     loading.value = false
   }
@@ -387,57 +319,22 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    if (USE_MOCK) {
-      if (form.id) {
-        const t = list.value.find((b) => b.id === form.id)
-        if (t) {
-          t.name = form.name
-          t.strategy = form.strategy
-          t.failContinue = form.failContinue
-          t.maxConcurrency = form.maxConcurrency
-          t.cron = form.cron || null
-          t.enabled = form.enabled
-        }
-      } else {
-        const newId = Math.max(0, ...list.value.map((b) => b.id)) + 1
-        list.value.unshift({
-          id: newId,
-          projectId: projectStore.currentProject?.id || 0,
-          name: form.name,
-          strategy: form.strategy,
-          failContinue: form.failContinue,
-          maxConcurrency: form.maxConcurrency,
-          cron: form.cron || null,
-          enabled: form.enabled,
-          lastRunId: null,
-          lastRunTime: null,
-          lastRunStatus: null,
-          createTime: '',
-          updateTime: ''
-        })
-        total.value = list.value.length
-      }
-      ElMessage.success('（mock）保存成功')
-      dialogVisible.value = false
-    } else {
-      const { createBatch, updateBatch } = await import('@/api/planBatch')
-      const payload = {
-        id: form.id,
-        name: form.name,
-        projectId: projectStore.currentProject?.id ?? 0,
-        strategy: form.strategy,
-        failContinue: form.failContinue,
-        maxConcurrency: form.maxConcurrency,
-        planIds: form.planIds,
-        cron: form.cron,
-        enabled: form.enabled
-      }
-      if (form.id) await updateBatch(payload)
-      else await createBatch(payload)
-      ElMessage.success('保存成功')
-      dialogVisible.value = false
-      await loadList()
+    const payload = {
+      id: form.id,
+      name: form.name,
+      projectId: projectStore.currentProject?.id ?? 0,
+      strategy: form.strategy,
+      failContinue: form.failContinue,
+      maxConcurrency: form.maxConcurrency,
+      planIds: form.planIds,
+      cron: form.cron,
+      enabled: form.enabled
     }
+    if (form.id) await updateBatch(payload)
+    else await createBatch(payload)
+    ElMessage.success('保存成功')
+    dialogVisible.value = false
+    await loadList()
   } finally {
     submitting.value = false
   }
@@ -453,28 +350,16 @@ async function handleDelete(row: PlanBatchInfo) {
   } catch {
     return
   }
-  if (USE_MOCK) {
-    list.value = list.value.filter((b) => b.id !== row.id)
-    total.value = list.value.length
-    ElMessage.success('（mock）删除成功')
-  } else {
-    const { deleteBatch } = await import('@/api/planBatch')
-    await deleteBatch(row.id)
-    ElMessage.success('删除成功')
-    await loadList()
-  }
+  await deleteBatch(row.id)
+  ElMessage.success('删除成功')
+  await loadList()
 }
 
 async function handleToggle(row: PlanBatchInfo, val: boolean) {
   row._toggling = true
   try {
-    if (USE_MOCK) {
-      row.enabled = val
-    } else {
-      const { toggleBatchEnabled } = await import('@/api/planBatch')
-      await toggleBatchEnabled(row.id, val)
-      row.enabled = val
-    }
+    await toggleBatchEnabled(row.id, val)
+    row.enabled = val
   } finally {
     row._toggling = false
   }
@@ -483,16 +368,9 @@ async function handleToggle(row: PlanBatchInfo, val: boolean) {
 async function handleExecute(row: PlanBatchInfo) {
   row._executing = true
   try {
-    if (USE_MOCK) {
-      await new Promise((r) => setTimeout(r, 800))
-      ElMessage.success('（mock）已触发执行，请到详情页查看进度')
-      router.push(`/batch/${row.id}`)
-    } else {
-      const { executeBatch } = await import('@/api/planBatch')
-      await executeBatch(row.id)
-      ElMessage.success('已触发执行')
-      router.push(`/batch/${row.id}`)
-    }
+    await executeBatch(row.id)
+    ElMessage.success('已触发执行')
+    router.push(`/batch/${row.id}`)
   } finally {
     row._executing = false
   }

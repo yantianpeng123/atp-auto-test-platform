@@ -196,18 +196,16 @@ import { Delete, Edit, Plus, Refresh, Search, VideoPlay } from '@element-plus/ic
 import { useProjectStore } from '@/stores/project'
 import { getEnvList } from '@/api/env'
 import type { EnvInfo } from '@/api/types'
-import type {
-  PlanExecuteResult,
-  TestPlanInfo,
-  TestPlanQuery
+import {
+  createPlan,
+  deletePlan,
+  executePlan,
+  getPlanCaseOptions,
+  getPlanList,
+  togglePlanEnabled,
+  updatePlan
 } from '@/api/plan'
-import { getPlanCaseOptions } from '@/api/plan'
-
-/**
- * 后端 TestPlan 模块已落地，默认走 @/api/plan 真实接口。
- * 如需本地纯演示可临时改回 true。
- */
-const USE_MOCK = false
+import type { PlanExecuteResult, TestPlanInfo, TestPlanQuery } from '@/api/plan'
 
 const projectStore = useProjectStore()
 
@@ -249,59 +247,6 @@ const rules: FormRules<PlanFormState> = {
   envId: [{ required: true, message: '请选择执行环境', trigger: 'change' }]
 }
 
-/* ----------------- mock 演示数据 ----------------- */
-const MOCK_PLANS: TestPlanInfo[] = [
-  {
-    id: 1,
-    name: '回归测试-全量',
-    projectId: 1,
-    envId: 1,
-    envName: '测试环境',
-    caseCount: 12,
-    cron: '0 0 2 * * ?',
-    enabled: true,
-    lastRunId: 101,
-    lastRunTime: '2026-09-12 02:00:12',
-    createTime: '',
-    updateTime: ''
-  },
-  {
-    id: 2,
-    name: '冒烟测试-核心链路',
-    projectId: 1,
-    envId: 2,
-    envName: '预发环境',
-    caseCount: 5,
-    cron: null,
-    enabled: false,
-    lastRunId: null,
-    lastRunTime: null,
-    createTime: '',
-    updateTime: ''
-  },
-  {
-    id: 3,
-    name: '压测-订单服务',
-    projectId: 2,
-    envId: 1,
-    envName: '测试环境',
-    caseCount: 8,
-    cron: '0 30 1 * * ?',
-    enabled: true,
-    lastRunId: null,
-    lastRunTime: null,
-    createTime: '',
-    updateTime: ''
-  }
-]
-const MOCK_CASES = [
-  { id: 1, name: '登录接口冒烟' },
-  { id: 2, name: '下单流程' },
-  { id: 3, name: '支付回调' },
-  { id: 4, name: '商品详情页' },
-  { id: 5, name: '购物车结算' }
-]
-
 onMounted(async () => {
   await loadEnv()
   await loadCases()
@@ -318,12 +263,8 @@ async function loadEnv() {
 }
 
 async function loadCases() {
-  if (USE_MOCK) {
-    caseOptions.value = MOCK_CASES
-  } else {
-    const pid = projectStore.currentProject?.id
-    if (pid) caseOptions.value = await getPlanCaseOptions(pid)
-  }
+  const pid = projectStore.currentProject?.id
+  if (pid) caseOptions.value = await getPlanCaseOptions(pid)
 }
 
 async function loadList() {
@@ -331,21 +272,9 @@ async function loadList() {
   try {
     // 项目隔离：仅查询当前项目下的计划
     const projectId = projectStore.currentProject?.id
-    if (USE_MOCK) {
-      let data = MOCK_PLANS
-      if (projectId) data = data.filter((p) => p.projectId === projectId)
-      if (query.name) {
-        const kw = query.name
-        data = data.filter((p) => p.name.includes(kw))
-      }
-      if (query.enabled !== undefined) data = data.filter((p) => p.enabled === query.enabled)
-      list.value = data
-      total.value = data.length
-    } else {
-      const res = await (await import('@/api/plan')).getPlanList({ ...query, projectId })
-      list.value = res.records
-      total.value = res.total
-    }
+    const res = await getPlanList({ ...query, projectId })
+    list.value = res.records
+    total.value = res.total
   } finally {
     loading.value = false
   }
@@ -400,54 +329,20 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    if (USE_MOCK) {
-      if (form.id) {
-        const t = list.value.find((p) => p.id === form.id)
-        if (t) {
-          t.name = form.name
-          t.envId = form.envId!
-          t.envName = envOptions.value.find((e) => e.id === form.envId)?.name || ''
-          t.caseCount = form.caseIds.length
-          t.cron = form.cron || null
-          t.enabled = form.enabled
-        }
-      } else {
-        const newId = Math.max(0, ...list.value.map((p) => p.id)) + 1
-        list.value.unshift({
-          id: newId,
-          name: form.name,
-          projectId: projectStore.currentProject?.id || 0,
-          envId: form.envId!,
-          envName: envOptions.value.find((e) => e.id === form.envId)?.name || '',
-          caseCount: form.caseIds.length,
-          cron: form.cron || null,
-          enabled: form.enabled,
-          lastRunId: null,
-          lastRunTime: null,
-          createTime: '',
-          updateTime: ''
-        })
-        total.value = list.value.length
-      }
-      ElMessage.success('（mock）保存成功')
-      dialogVisible.value = false
-    } else {
-      const { createPlan, updatePlan } = await import('@/api/plan')
-      const payload = {
-        id: form.id,
-        name: form.name,
-        projectId: projectStore.currentProject?.id ?? 0,
-        envId: form.envId!,
-        caseIds: form.caseIds,
-        cron: form.cron,
-        enabled: form.enabled
-      }
-      if (form.id) await updatePlan(payload)
-      else await createPlan(payload)
-      ElMessage.success('保存成功')
-      dialogVisible.value = false
-      await loadList()
+    const payload = {
+      id: form.id,
+      name: form.name,
+      projectId: projectStore.currentProject?.id ?? 0,
+      envId: form.envId!,
+      caseIds: form.caseIds,
+      cron: form.cron,
+      enabled: form.enabled
     }
+    if (form.id) await updatePlan(payload)
+    else await createPlan(payload)
+    ElMessage.success('保存成功')
+    dialogVisible.value = false
+    await loadList()
   } finally {
     submitting.value = false
   }
@@ -463,28 +358,16 @@ async function handleDelete(row: TestPlanInfo) {
   } catch {
     return
   }
-  if (USE_MOCK) {
-    list.value = list.value.filter((p) => p.id !== row.id)
-    total.value = list.value.length
-    ElMessage.success('（mock）删除成功')
-  } else {
-    const { deletePlan } = await import('@/api/plan')
-    await deletePlan(row.id)
-    ElMessage.success('删除成功')
-    await loadList()
-  }
+  await deletePlan(row.id)
+  ElMessage.success('删除成功')
+  await loadList()
 }
 
 async function handleToggle(row: TestPlanInfo, val: boolean) {
   row._toggling = true
   try {
-    if (USE_MOCK) {
-      row.enabled = val
-    } else {
-      const { togglePlanEnabled } = await import('@/api/plan')
-      await togglePlanEnabled(row.id, val)
-      row.enabled = val
-    }
+    await togglePlanEnabled(row.id, val)
+    row.enabled = val
   } finally {
     row._toggling = false
   }
@@ -493,38 +376,10 @@ async function handleToggle(row: TestPlanInfo, val: boolean) {
 async function handleExecute(row: TestPlanInfo) {
   row._executing = true
   try {
-    if (USE_MOCK) {
-      // 模拟执行耗时
-      await new Promise((r) => setTimeout(r, 900))
-      planResult.value = mockExecute(row)
-    } else {
-      const { executePlan } = await import('@/api/plan')
-      planResult.value = await executePlan(row.id)
-    }
+    planResult.value = await executePlan(row.id)
     resultVisible.value = true
   } finally {
     row._executing = false
-  }
-}
-
-function mockExecute(row: TestPlanInfo): PlanExecuteResult {
-  const cases = MOCK_CASES.map((c, i) => ({
-    caseId: c.id,
-    caseName: c.name,
-    status: i % 4 === 3 ? ('FAILED' as const) : ('SUCCESS' as const),
-    durationMs: 300 + i * 120,
-    passedSteps: 4,
-    failedSteps: i % 4 === 3 ? 1 : 0
-  }))
-  const failed = cases.filter((c) => c.status === 'FAILED').length
-  return {
-    planId: row.id,
-    planName: row.name,
-    totalCases: cases.length,
-    passedCases: cases.length - failed,
-    failedCases: failed,
-    durationMs: cases.reduce((s, c) => s + c.durationMs, 0),
-    cases
   }
 }
 </script>

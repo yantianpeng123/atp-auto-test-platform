@@ -93,15 +93,6 @@
       <template #header>
         <div class="card-header">
           <span class="card-title">执行看板（最近一次运行）</span>
-          <el-button
-            v-if="currentRun && currentRun.status !== 'RUNNING'"
-            type="warning"
-            size="small"
-            :icon="RefreshRight"
-            @click="rerunFailed"
-          >
-            重跑失败
-          </el-button>
         </div>
       </template>
 
@@ -144,15 +135,6 @@
             <span class="run-item-name">{{ item.planName }}</span>
             <span class="run-item-status">{{ runItemStatusText(item.status) }}</span>
             <span v-if="item.durationMs" class="run-item-dur">{{ (item.durationMs / 1000).toFixed(1) }}s</span>
-            <el-button
-              v-if="item.status === 'FAILED'"
-              link
-              type="warning"
-              size="small"
-              @click="rerunItem(item)"
-            >
-              重跑
-            </el-button>
             <el-button
               v-if="item.executionId"
               link
@@ -258,27 +240,23 @@ import {
   CaretBottom,
   CaretTop,
   Edit,
-  RefreshRight,
   VideoPlay
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import {
+  executeBatch,
   getBatchDetail,
-  getBatchRuns
+  getBatchRuns,
+  getBatchRun,
+  toggleBatchEnabled,
+  updateBatch
 } from '@/api/planBatch'
 import type {
   PlanBatchInfo,
   PlanBatchRun,
   PlanBatchRunItem,
-  RunItemStatus,
-  RunStatus
+  RunItemStatus
 } from '@/api/planBatch'
-
-/**
- * 后端 PlanBatch 模块已实现，USE_MOCK=false 走真实接口（@/api/planBatch）。
- * 真实模式下：loadBatch 拉取批次详情与运行历史；执行后每 3 秒轮询 getBatchRun 刷新看板。
- */
-const USE_MOCK = false
 
 const route = useRoute()
 const router = useRouter()
@@ -310,73 +288,6 @@ const editRules: FormRules<typeof editForm> = {
   name: [{ required: true, message: '请输入批次名称', trigger: 'blur' }]
 }
 
-/* ----------------- mock 数据 ----------------- */
-const MOCK_PLANS = [
-  { id: 1, name: '登录与鉴权用例组' },
-  { id: 2, name: '订单核心链路' },
-  { id: 3, name: '支付回调校验' },
-  { id: 4, name: '消息通知链路' },
-  { id: 5, name: '报表导出校验' }
-]
-const MOCK_BATCH_MAP: Record<number, Omit<PlanBatchInfo, 'projectId'>> = {
-  1: {
-    id: 1,
-    name: '每日回归批次',
-    strategy: 'PARALLEL',
-    failContinue: true,
-    maxConcurrency: 3,
-    cron: '0 0 2 * * ?',
-    enabled: true,
-    lastRunId: 1009,
-    lastRunTime: '2026-09-12 02:00:12',
-    lastRunStatus: 'PARTIAL_FAILED',
-    createTime: '',
-    updateTime: ''
-  },
-  2: {
-    id: 2,
-    name: '冒烟测试批次',
-    strategy: 'SERIAL',
-    failContinue: false,
-    maxConcurrency: 1,
-    cron: '0 30 9 * * ?',
-    enabled: false,
-    lastRunId: null,
-    lastRunTime: null,
-    lastRunStatus: null,
-    createTime: '',
-    updateTime: ''
-  },
-  3: {
-    id: 3,
-    name: '接口全量校验',
-    strategy: 'PARALLEL',
-    failContinue: true,
-    maxConcurrency: 2,
-    cron: '0 0 1 * * ?',
-    enabled: true,
-    lastRunId: 1005,
-    lastRunTime: '2026-09-11 01:00:00',
-    lastRunStatus: 'SUCCESS',
-    createTime: '',
-    updateTime: ''
-  },
-  4: {
-    id: 4,
-    name: '核心链路巡检',
-    strategy: 'SERIAL',
-    failContinue: false,
-    maxConcurrency: 1,
-    cron: '0 0 4 * * ?',
-    enabled: false,
-    lastRunId: null,
-    lastRunTime: null,
-    lastRunStatus: null,
-    createTime: '',
-    updateTime: ''
-  }
-}
-
 const progressPercent = computed(() => {
   if (!currentRun.value || currentRun.value.total === 0) return 0
   const done = currentRun.value.passed + currentRun.value.failed
@@ -397,11 +308,6 @@ function runItemStatusText(s: RunItemStatus): string {
           ? '跳过'
           : '排队中'
 }
-function nowStr(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
 
 onMounted(() => {
   loadBatch()
@@ -409,22 +315,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => stopPolling())
 
+/** 拉取批次详情 + 运行历史 */
 async function loadBatch() {
-  if (USE_MOCK) {
-    const base = MOCK_BATCH_MAP[batchId]
-    if (!base) {
-      batch.value = null
-      return
-    }
-    batch.value = { ...base, projectId: projectStore.currentProject?.id || 1 }
-    planItems.value = MOCK_PLANS.map((p, i) => ({ id: p.id, name: p.name, sortOrder: i + 1 }))
-    // mock：为每个批次造一条最近运行历史
-    runHistory.value = [buildMockRun(batch.value, batch.value.lastRunStatus as RunStatus | null, true)]
-    currentRun.value = runHistory.value[0]
-    return
-  }
-
-  // 真实模式：拉取批次详情 + 运行历史
   const info = await getBatchDetail(batchId)
   batch.value = info
   planItems.value = (info.plans || []).map((p) => ({ id: p.id, name: p.name, sortOrder: p.sortOrder }))
@@ -441,46 +333,6 @@ async function loadBatch() {
   }
 }
 
-function buildMockRun(
-  b: PlanBatchInfo,
-  finalStatus: RunStatus | null,
-  finished: boolean
-): PlanBatchRun {
-  const items: PlanBatchRunItem[] = planItems.value.map((p, i) => {
-    let status: RunItemStatus = finished ? (p.id % 4 === 0 ? 'FAILED' : 'SUCCESS') : 'QUEUED'
-    return {
-      id: i + 1,
-      runId: 0,
-      planId: p.id,
-      planName: p.name,
-      sortOrder: p.sortOrder,
-      status,
-      executionId: finished ? 9000 + i : null,
-      durationMs: finished ? 600 + i * 200 : null,
-      errorMsg: status === 'FAILED' ? '断言失败：预期 200，实际 500' : null,
-      startTime: finished ? nowStr() : null,
-      endTime: finished ? nowStr() : null
-    }
-  })
-  const passed = items.filter((i) => i.status === 'SUCCESS').length
-  const failed = items.filter((i) => i.status === 'FAILED').length
-  return {
-    id: b.lastRunId ?? 1000,
-    batchId: b.id,
-    triggerType: 'SCHEDULED',
-    status: finalStatus ?? 'SUCCESS',
-    total: items.length,
-    passed,
-    failed,
-    running: finished ? 0 : items.length,
-    queued: finished ? 0 : items.length,
-    startTime: b.lastRunTime ?? nowStr(),
-    endTime: finished ? b.lastRunTime ?? nowStr() : null,
-    durationMs: finished ? items.reduce((s, i) => s + (i.durationMs ?? 0), 0) : null,
-    items
-  }
-}
-
 function movePlan(row: { sortOrder: number }, dir: number) {
   const idx = planItems.value.findIndex((p) => p.sortOrder === row.sortOrder)
   const swapIdx = idx + dir
@@ -493,104 +345,16 @@ function movePlan(row: { sortOrder: number }, dir: number) {
   planItems.value.sort((x, y) => x.sortOrder - y.sortOrder)
 }
 
-/* ---------------- mock 运行引擎（轮询演示） ---------------- */
-function startMockRun() {
-  if (!batch.value) return
-  const run: PlanBatchRun = {
-    id: Date.now(),
-    batchId: batch.value.id,
-    triggerType: 'MANUAL',
-    status: 'RUNNING',
-    total: planItems.value.length,
-    passed: 0,
-    failed: 0,
-    running: 0,
-    queued: planItems.value.length,
-    startTime: nowStr(),
-    endTime: null,
-    durationMs: null,
-    items: planItems.value.map((p, i) => ({
-      id: i + 1,
-      runId: 0,
-      planId: p.id,
-      planName: p.name,
-      sortOrder: p.sortOrder,
-      status: 'QUEUED',
-      executionId: null,
-      durationMs: null,
-      errorMsg: null,
-      startTime: null,
-      endTime: null
-    }))
-  }
-  currentRun.value = run
-  runHistory.value = [run, ...runHistory.value]
-  executing.value = true
-  startPolling()
-}
-
-function tickMockRun() {
-  const run = currentRun.value
-  if (!run || run.status !== 'RUNNING') {
-    stopPolling()
-    return
-  }
-  const maxConc = batch.value?.maxConcurrency ?? 1
-  // 1) 随机结束一个正在运行的计划
-  const runningItems = run.items.filter((i) => i.status === 'RUNNING')
-  if (runningItems.length) {
-    const it = runningItems[Math.floor(Math.random() * runningItems.length)]
-    const fail = it.planId % 4 === 0
-    it.status = fail ? 'FAILED' : 'SUCCESS'
-    it.durationMs = 600 + Math.floor(Math.random() * 1400)
-    it.endTime = nowStr()
-    it.executionId = 9000 + it.id
-    if (fail) {
-      it.errorMsg = '断言失败：预期 200，实际 500'
-      run.failed++
-    } else {
-      run.passed++
-    }
-    run.running--
-  }
-  // 2) 按并发上限启动排队中的计划
-  while (run.running < maxConc && run.items.some((i) => i.status === 'QUEUED')) {
-    const q = run.items.find((i) => i.status === 'QUEUED')!
-    q.status = 'RUNNING'
-    q.startTime = nowStr()
-    run.running++
-    run.queued--
-  }
-  // 3) 完成判定
-  if (run.running === 0 && run.queued === 0) {
-    run.status = run.failed > 0 ? 'PARTIAL_FAILED' : 'SUCCESS'
-    run.endTime = nowStr()
-    run.durationMs = run.items.reduce((s, i) => s + (i.durationMs ?? 0), 0)
-    if (batch.value) {
-      batch.value.lastRunId = run.id
-      batch.value.lastRunTime = run.endTime
-      batch.value.lastRunStatus = run.status
-    }
-    executing.value = false
-    stopPolling()
-  }
-}
-
 function startPolling() {
   stopPolling()
-  if (USE_MOCK) {
-    pollTimer = setInterval(tickMockRun, 1200)
-  } else {
-    // 真实模式：每 3 秒拉取运行实例的最新状态
-    pollTimer = setInterval(async () => {
-      if (!currentRun.value) return stopPolling()
-      const { getBatchRun } = await import('@/api/planBatch')
-      const run = await getBatchRun(currentRun.value.id)
-      currentRun.value = run
-      executing.value = run.status === 'RUNNING'
-      if (run.status !== 'RUNNING') stopPolling()
-    }, 3000)
-  }
+  // 每 3 秒拉取运行实例的最新状态
+  pollTimer = setInterval(async () => {
+    if (!currentRun.value) return stopPolling()
+    const run = await getBatchRun(currentRun.value.id)
+    currentRun.value = run
+    executing.value = run.status === 'RUNNING'
+    if (run.status !== 'RUNNING') stopPolling()
+  }, 3000)
 }
 function stopPolling() {
   if (pollTimer) {
@@ -599,62 +363,15 @@ function stopPolling() {
   }
 }
 
-function handleExecute() {
+async function handleExecute() {
   if (!batch.value) return
-  if (USE_MOCK) {
-    startMockRun()
-    ElMessage.success('（mock）已开始执行，看板实时刷新')
-  } else {
-    void import('@/api/planBatch').then(async ({ executeBatch }) => {
-      executing.value = true
-      const run = await executeBatch(batchId)
-      currentRun.value = run
-      runHistory.value = [run, ...runHistory.value]
-      executing.value = false
-      // 后端 executeBatch 为同步执行，正常返回即已完成；若返回 RUNNING（如被调度接管）才轮询
-      if (run.status === 'RUNNING') startPolling()
-    })
-  }
-}
-
-function rerunFailed() {
-  const run = currentRun.value
-  if (!run) return
-  // 失败项重新置为排队，重置汇总，重新轮询
-  run.items.forEach((i) => {
-    if (i.status === 'FAILED') {
-      i.status = 'QUEUED'
-      i.errorMsg = null
-      i.durationMs = null
-      i.executionId = null
-      i.startTime = null
-      i.endTime = null
-    }
-  })
-  run.failed = 0
-  run.running = 0
-  run.queued = run.items.filter((i) => i.status === 'QUEUED').length
-  run.status = 'RUNNING'
-  run.endTime = null
   executing.value = true
-  startPolling()
-  ElMessage.success('（mock）已重跑失败计划')
-}
-
-function rerunItem(item: PlanBatchRunItem) {
-  const run = currentRun.value
-  if (!run) return
-  item.status = 'QUEUED'
-  item.errorMsg = null
-  item.durationMs = null
-  item.executionId = null
-  item.startTime = null
-  item.endTime = null
-  run.failed = Math.max(0, run.failed - 1)
-  run.queued++
-  run.status = 'RUNNING'
-  executing.value = true
-  startPolling()
+  const run = await executeBatch(batchId)
+  currentRun.value = run
+  runHistory.value = [run, ...runHistory.value]
+  executing.value = false
+  // 后端 executeBatch 为同步执行，正常返回即已完成；若返回 RUNNING（如被调度接管）才轮询
+  if (run.status === 'RUNNING') startPolling()
 }
 
 function viewExecution(item: PlanBatchRunItem) {
@@ -671,10 +388,7 @@ async function handleToggle(val: boolean) {
   if (!batch.value) return
   batch.value._toggling = true
   try {
-    if (!USE_MOCK) {
-      const { toggleBatchEnabled } = await import('@/api/planBatch')
-      await toggleBatchEnabled(batch.value.id, val)
-    }
+    await toggleBatchEnabled(batch.value.id, val)
     batch.value.enabled = val
   } finally {
     if (batch.value) batch.value._toggling = false
@@ -702,31 +416,19 @@ async function handleEditSubmit() {
   if (!valid) return
   submitting.value = true
   try {
-    if (USE_MOCK) {
-      batch.value.name = editForm.name
-      batch.value.strategy = editForm.strategy
-      batch.value.failContinue = editForm.failContinue
-      batch.value.maxConcurrency = editForm.maxConcurrency
-      batch.value.cron = editForm.cron || null
-      batch.value.enabled = editForm.enabled
-      ElMessage.success('（mock）保存成功')
-      editVisible.value = false
-    } else {
-      const { updateBatch } = await import('@/api/planBatch')
-      await updateBatch({
-        id: batch.value.id,
-        name: editForm.name,
-        projectId: projectStore.currentProject?.id ?? 0,
-        strategy: editForm.strategy,
-        failContinue: editForm.failContinue,
-        maxConcurrency: editForm.maxConcurrency,
-        planIds: planItems.value.map((p) => p.id),
-        cron: editForm.cron,
-        enabled: editForm.enabled
-      })
-      ElMessage.success('保存成功')
-      editVisible.value = false
-    }
+    await updateBatch({
+      id: batch.value.id,
+      name: editForm.name,
+      projectId: projectStore.currentProject?.id ?? 0,
+      strategy: editForm.strategy,
+      failContinue: editForm.failContinue,
+      maxConcurrency: editForm.maxConcurrency,
+      planIds: planItems.value.map((p) => p.id),
+      cron: editForm.cron,
+      enabled: editForm.enabled
+    })
+    ElMessage.success('保存成功')
+    editVisible.value = false
   } finally {
     submitting.value = false
   }
