@@ -5,6 +5,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
+import com.atp.common.result.PageResult;
 import com.atp.module.base.entity.ApiDefinition;
 import com.atp.module.base.mapper.ApiDefinitionMapper;
 import com.atp.module.env.entity.TestEnv;
@@ -20,6 +21,12 @@ import com.atp.module.execute.vo.AssertionResultVO;
 import com.atp.module.execute.vo.CaseExecuteVO;
 import com.atp.module.execute.vo.RoundExecuteVO;
 import com.atp.module.execute.vo.StepExecuteVO;
+import com.atp.module.execute.vo.ExecutionReportVO;
+import com.atp.module.execute.vo.ExecutionSummaryVO;
+import com.atp.module.plan.entity.TestPlan;
+import com.atp.module.plan.mapper.TestPlanMapper;
+import com.atp.module.user.entity.User;
+import com.atp.module.user.mapper.UserMapper;
 import com.atp.module.testcase.entity.DatasetItem;
 import com.atp.module.testcase.entity.DatasetTemplate;
 import com.atp.module.testcase.entity.TestCase;
@@ -36,10 +43,12 @@ import com.atp.module.execute.mapper.ExecutionDetailMapper;
 import com.atp.module.execute.mapper.ExecutionMapper;
 import com.atp.security.UserPrincipal;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -71,6 +80,8 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final ExecutionMapper executionMapper;
     private final ExecutionDetailMapper executionDetailMapper;
     private final ExecutionAssertionMapper executionAssertionMapper;
+    private final TestPlanMapper testPlanMapper;
+    private final UserMapper userMapper;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
@@ -492,7 +503,7 @@ public class ExecuteServiceImpl implements ExecuteService {
         return null;
     }
 
-    // ==================== 历史查询 ====================
+    // ==================== 历史查询 / 报告 ====================
 
     @Override
     @Transactional(readOnly = true)
@@ -504,13 +515,144 @@ public class ExecuteServiceImpl implements ExecuteService {
         if (exec == null) {
             return null;
         }
+        List<RoundExecuteVO> rounds = buildRounds(exec.getId());
+        return CaseExecuteVO.builder()
+                .caseId(exec.getCaseId())
+                .caseName(exec.getCaseName())
+                .envId(exec.getEnvId())
+                .totalRounds(exec.getTotalRounds())
+                .passedRounds(exec.getPassedRounds())
+                .failedRounds(exec.getFailedRounds())
+                .status(exec.getStatus())
+                .durationMs(exec.getDurationMs())
+                .rounds(rounds)
+                .build();
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ExecutionReportVO getExecutionReport(Long id) {
+        Execution exec = executionMapper.selectById(id);
+        if (exec == null) {
+            throw new BizException(ResultCode.EXECUTION_NOT_FOUND);
+        }
+        List<RoundExecuteVO> rounds = buildRounds(exec.getId());
+
+        String planName = null;
+        if (exec.getPlanId() != null) {
+            TestPlan plan = testPlanMapper.selectById(exec.getPlanId());
+            planName = plan == null ? null : plan.getName();
+        }
+        String executorName = null;
+        if (exec.getExecutorId() != null) {
+            User user = userMapper.selectById(exec.getExecutorId());
+            executorName = user == null ? null : user.getUsername();
+        }
+
+        return ExecutionReportVO.builder()
+                .executionId(exec.getId())
+                .planId(exec.getPlanId())
+                .planName(planName)
+                .caseId(exec.getCaseId())
+                .caseName(exec.getCaseName())
+                .envId(exec.getEnvId())
+                .envName(exec.getEnvName())
+                .triggerType(exec.getTriggerType())
+                .executorId(exec.getExecutorId())
+                .executorName(executorName)
+                .status(exec.getStatus())
+                .startTime(exec.getStartTime())
+                .endTime(exec.getEndTime())
+                .durationMs(exec.getDurationMs())
+                .totalRounds(exec.getTotalRounds())
+                .passedRounds(exec.getPassedRounds())
+                .failedRounds(exec.getFailedRounds())
+                .rounds(rounds)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResult<ExecutionSummaryVO> getReportPage(Long projectId, String keyword, String status,
+                                                       long page, long size) {
+        Page<Execution> p = new Page<>(page, size);
+        QueryWrapper<Execution> qw = new QueryWrapper<>();
+        if (projectId != null) {
+            qw.eq("project_id", projectId);
+        }
+        if (status != null && !status.isBlank()) {
+            qw.eq("status", status);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            // 用例名模糊 OR 所属计划名模糊（先按计划名查 planId 集合）
+            List<Long> planIds = testPlanMapper.selectList(
+                    new QueryWrapper<TestPlan>().like("name", keyword))
+                    .stream().map(TestPlan::getId).toList();
+            qw.and(w -> {
+                w.like("case_name", keyword);
+                if (!planIds.isEmpty()) {
+                    w.or().in("plan_id", planIds);
+                }
+            });
+        }
+        qw.orderByDesc("start_time");
+        Page<Execution> result = executionMapper.selectPage(p, qw);
+
+        List<Execution> records = result.getRecords();
+        // 批量查计划名与执行人名，避免 N+1
+        Map<Long, String> planNameMap = records.stream()
+                .map(Execution::getPlanId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet())
+                .stream()
+                .map(testPlanMapper::selectById)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(TestPlan::getId, TestPlan::getName, (a, b) -> a));
+        Map<Long, String> userNameMap = records.stream()
+                .map(Execution::getExecutorId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet())
+                .stream()
+                .map(userMapper::selectById)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(User::getId, User::getUsername, (a, b) -> a));
+
+        List<ExecutionSummaryVO> vos = new ArrayList<>();
+        for (Execution exec : records) {
+            vos.add(ExecutionSummaryVO.builder()
+                    .executionId(exec.getId())
+                    .planId(exec.getPlanId())
+                    .planName(exec.getPlanId() == null ? null : planNameMap.get(exec.getPlanId()))
+                    .caseId(exec.getCaseId())
+                    .caseName(exec.getCaseName())
+                    .envId(exec.getEnvId())
+                    .envName(exec.getEnvName())
+                    .triggerType(exec.getTriggerType())
+                    .executorName(exec.getExecutorId() == null ? null : userNameMap.get(exec.getExecutorId()))
+                    .status(exec.getStatus())
+                    .startTime(exec.getStartTime())
+                    .durationMs(exec.getDurationMs())
+                    .totalRounds(exec.getTotalRounds())
+                    .passedRounds(exec.getPassedRounds())
+                    .failedRounds(exec.getFailedRounds())
+                    .build());
+        }
+        return PageResult.<ExecutionSummaryVO>builder()
+                .records(vos)
+                .total(result.getTotal())
+                .page(result.getCurrent())
+                .size(result.getSize())
+                .build();
+    }
+
+    /** 将一次执行的明细（detail + assertion）组装为按轮次分组的步骤列表 */
+    private List<RoundExecuteVO> buildRounds(Long executionId) {
         List<ExecutionDetail> details = executionDetailMapper.selectList(new QueryWrapper<ExecutionDetail>()
-                .eq("execution_id", exec.getId())
+                .eq("execution_id", executionId)
                 .orderByAsc("round_index")
                 .orderByAsc("step_index"));
         List<ExecutionAssertion> assertions = executionAssertionMapper.selectList(
-                new QueryWrapper<ExecutionAssertion>().eq("execution_id", exec.getId()));
+                new QueryWrapper<ExecutionAssertion>().eq("execution_id", executionId));
 
         Map<Long, List<ExecutionAssertion>> assertByDetail = assertions.stream()
                 .collect(Collectors.groupingBy(ExecutionAssertion::getDetailId));
@@ -574,17 +716,6 @@ public class ExecuteServiceImpl implements ExecuteService {
                     .steps(steps)
                     .build());
         });
-
-        return CaseExecuteVO.builder()
-                .caseId(exec.getCaseId())
-                .caseName(exec.getCaseName())
-                .envId(exec.getEnvId())
-                .totalRounds(exec.getTotalRounds())
-                .passedRounds(exec.getPassedRounds())
-                .failedRounds(exec.getFailedRounds())
-                .status(exec.getStatus())
-                .durationMs(exec.getDurationMs())
-                .rounds(rounds)
-                .build();
+        return rounds;
     }
 }

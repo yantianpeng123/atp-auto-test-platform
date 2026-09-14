@@ -85,12 +85,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useProjectStore } from '@/stores/project'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import { getReportList } from '@/api/execute'
 import type { ExecutionSummary } from '@/api/execute'
 
 const router = useRouter()
+const projectStore = useProjectStore()
 
 const loading = ref(false)
 const list = ref<ExecutionSummary[]>([])
@@ -111,7 +113,8 @@ async function loadList() {
       page: query.page,
       size: query.size,
       keyword: query.keyword,
-      status: query.status
+      status: query.status,
+      projectId: projectStore.currentProject?.id ?? null
     })
     list.value = res.records
     total.value = res.total

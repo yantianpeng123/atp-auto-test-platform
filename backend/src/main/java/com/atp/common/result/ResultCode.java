@@ -45,6 +45,7 @@ public enum ResultCode {
     PLAN_NOT_FOUND(3101, "测试计划不存在"),
     CASE_LINKED(3102, "用例不存在或不属于当前项目"),
     PLAN_NAME_EXISTS(3103, "测试计划名称已存在"),
+    EXECUTION_NOT_FOUND(3104, "执行记录不存在"),
 
     BATCH_NOT_FOUND(3201, "定时任务批次不存在"),
     BATCH_NAME_EXISTS(3201,"定时任务已存在"),
