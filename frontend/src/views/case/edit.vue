@@ -118,7 +118,6 @@
               <template #default="{ data }">
                 <!-- 分组节点 -->
                 <div v-if="data.type === 'group'" class="tree-group" :class="{ 'tree-group-active': isGroupActive(data) }">
-                  <el-icon class="tree-group-icon"><FolderOpened /></el-icon>
                   <span class="tree-group-label">{{ data.label }}</span>
                   <el-badge v-if="data.count !== undefined" :value="data.count" :max="99" class="tree-group-badge" type="primary" />
                 </div>
@@ -155,7 +154,7 @@
           <!-- 前置扩展 -->
           <el-card v-if="viewMode === 'pre'" shadow="never" class="section-card extension-section">
             <template #header>
-              <div class="detail-card-header">
+              <div class="steps-card-header">
                 <span class="section-title">前置扩展</span>
                 <el-button type="primary" size="small" :icon="Plus" @click="openExtensionDialog('pre')">新增前置扩展</el-button>
               </div>
@@ -172,7 +171,7 @@
           <!-- 后置扩展 -->
           <el-card v-else-if="viewMode === 'post'" shadow="never" class="section-card extension-section">
             <template #header>
-              <div class="detail-card-header">
+              <div class="steps-card-header">
                 <span class="section-title">后置扩展</span>
                 <el-button type="primary" size="small" :icon="Plus" @click="openExtensionDialog('post')">新增后置扩展</el-button>
               </div>
@@ -487,7 +486,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Bottom,
   Delete,
-  FolderOpened,
   Plus,
   Top
 } from '@element-plus/icons-vue'
