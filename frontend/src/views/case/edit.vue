@@ -81,12 +81,11 @@
         label-position="left"
         class="edit-form"
       >
-        <!-- 左侧：步骤列表 -->
+        <!-- 左侧：步骤导航树（前置 / 用例 / 后置） -->
         <div class="left-panel">
           <el-card shadow="never" class="section-card steps-section">
             <template #header>
               <div class="steps-card-header">
-                
                 <div class="steps-header-actions">
                   <el-button type="primary" size="small" :icon="Plus" @click="openApiDialog">添加步骤</el-button>
                 </div>
@@ -107,193 +106,198 @@
               </div>
             </template>
 
-            <div v-if="form.steps.length === 0" class="steps-empty">
-              <el-empty description="暂无步骤，点击添加" :image-size="80" />
-            </div>
-
-            <div v-else class="steps-list">
-              <div
-                v-for="(step, index) in form.steps"
-                :key="index"
-                class="step-card"
-                :class="{ 'step-active': activeStepIndex === index }"
-                @click="selectStep(index)"
-              >
-                <!-- 步骤头部 -->
-                <div class="step-header">
-                  <span class="step-order">{{ index + 1 }}</span>
-
-                  <!-- 已选接口信息展示 -->
-                  <div v-if="getStepApiInfo(step)" class="step-api-badge">
-                    <el-tag size="small" :type="methodTagType(getStepApiInfo(step)!.method)" class="method-tag">
-                      {{ getStepApiInfo(step)!.method }}
+            <el-tree
+              v-if="treeData.length"
+              :data="treeData"
+              node-key="key"
+              :default-expanded-keys="['g-main']"
+              :expand-on-click-node="false"
+              class="step-tree"
+              @node-click="handleNodeClick"
+            >
+              <template #default="{ data }">
+                <!-- 分组节点 -->
+                <div v-if="data.type === 'group'" class="tree-group" :class="{ 'tree-group-active': isGroupActive(data) }">
+                  <el-icon class="tree-group-icon"><FolderOpened /></el-icon>
+                  <span class="tree-group-label">{{ data.label }}</span>
+                  <el-badge v-if="data.count !== undefined" :value="data.count" :max="99" class="tree-group-badge" type="primary" />
+                </div>
+                <!-- 用例步骤子节点 -->
+                <div v-else class="tree-step" :class="{ 'tree-step-active': data.uid === currentMainUid }">
+                  <span class="tree-step-order">{{ data.order }}</span>
+                  <template v-if="stepByUid(data.uid) && getStepApiInfo(stepByUid(data.uid)!)">
+                    <el-tag size="small" :type="methodTagType(getStepApiInfo(stepByUid(data.uid)!)!.method)" class="method-tag">
+                      {{ getStepApiInfo(stepByUid(data.uid)!)!.method }}
                     </el-tag>
-                    <span class="step-api-path">{{ getStepApiInfo(step)!.path }}</span>
-                  </div>
-                  <span v-else class="step-api-missing">未选择接口</span>
-
-                  <div class="step-actions" @click.stop>
+                    <span class="tree-step-path">{{ getStepApiInfo(stepByUid(data.uid)!)!.path }}</span>
+                  </template>
+                  <span v-else class="tree-step-missing">未选择接口</span>
+                  <div class="tree-step-actions" @click.stop>
                     <el-tooltip content="上移" placement="top">
-                      <el-button
-                        :icon="Top"
-                        link
-                        size="small"
-                        :disabled="index === 0"
-                        @click="moveStep(index, -1)"
-                      />
+                      <el-button :icon="Top" link size="small" :disabled="isFirstInPhase(data.uid)" @click="moveWithinPhase(data.uid, -1)" />
                     </el-tooltip>
                     <el-tooltip content="下移" placement="top">
-                      <el-button
-                        :icon="Bottom"
-                        link
-                        size="small"
-                        :disabled="index === form.steps.length - 1"
-                        @click="moveStep(index, 1)"
-                      />
+                      <el-button :icon="Bottom" link size="small" :disabled="isLastInPhase(data.uid)" @click="moveWithinPhase(data.uid, 1)" />
                     </el-tooltip>
                     <el-tooltip content="删除步骤" placement="top">
-                      <el-button
-                        :icon="Delete"
-                        link
-                        type="danger"
-                        size="small"
-                        @click="removeStep(index)"
-                      />
+                      <el-button :icon="Delete" link type="danger" size="small" @click="removeStepByUid(data.uid)" />
                     </el-tooltip>
                   </div>
                 </div>
-              </div>
-            </div>
+              </template>
+            </el-tree>
+            <el-empty v-else description="暂无步骤" :image-size="80" />
           </el-card>
         </div>
 
-        <!-- 右侧：当前接口 + 前置扩展 -->
+        <!-- 右侧：前置/后置扩展表格 或 用例步骤详情 -->
         <div class="right-panel">
-          <!-- 步骤详情 -->
-          <el-card v-if="activeStep" shadow="never" class="section-card detail-section">
+          <!-- 前置扩展 -->
+          <el-card v-if="viewMode === 'pre'" shadow="never" class="section-card extension-section">
             <template #header>
               <div class="detail-card-header">
-                <span class="section-title">当前接口:</span>
-                <el-tag size="small" :type="methodTagType(getStepApiInfo(activeStep)!.method)" class="method-tag">
-                    {{ getStepApiInfo(activeStep)!.method }}
-                  </el-tag>
-                <span v-if="getStepApiInfo(activeStep)" class="detail-api-path">{{ getStepApiInfo(activeStep)!.path }}</span>
-                <el-button type="primary" link size="small" @click="openApiDialogForStep(activeStepIndex!)">更换接口</el-button>
-                <el-button type="primary" link size="small" @click="toggleAssertions">断言</el-button>
-                <el-button type="primary" link size="small" @click="toggleSetupScript">前置扩展</el-button>
-                <el-button type="primary" link size="small" @click="openDatasetDialog">数据源选择</el-button>
+                <span class="section-title">前置扩展</span>
+                <el-button type="primary" size="small" :icon="Plus" @click="openExtensionDialog('pre')">新增前置扩展</el-button>
               </div>
             </template>
+            <extension-table
+              :steps="preSteps"
+              :component-map="componentMap"
+              @add="openExtensionDialog('pre')"
+              @edit="(s) => openExtensionDialog('pre', s)"
+              @delete="removeStepByUid"
+            />
+          </el-card>
 
-            <!-- 前置脚本 -->
-            <div v-if="showSetupScript" class="step-form-item">
-              <div class="field-label">前置扩展</div>
-              <el-input
-                v-model="form.setupScript"
-                type="textarea"
-                :rows="4"
-                placeholder="用例执行前运行的脚本（如参数预处理、数据准备），执行引擎支持"
-                class="code-textarea"
-              />
-            </div>
-
-            <!-- 响应变量名 -->
-            <div class="step-form-item">
-              <div class="field-label">响应变量名</div>
-              <el-input
-                v-model="activeStep.responseVar"
-                placeholder="给该接口响应数据命名，供后续步骤引用（如 loginResp），留空则不保存"
-                clearable
-              />
-            </div>
-
-            <!-- 请求覆盖（拆分为请求头 / 请求参数） -->
-            <div  class="request-override-section">
-              <el-tabs v-model="requestTab" class="request-tabs">
-                <el-tab-pane label="请求头" name="headers">
-                  <el-input
-                    v-model="activeStep.requestHeaders"
-                    type="textarea"
-                    @blur="formatJsonField('requestHeaders')"
-                    :rows="4"
-                    placeholder='JSON格式，覆盖接口默认请求头&#10;可用${varName}引用上一步提取的变量&#10;如：{"Authorization":"Bearer ${token}","Content-Type":"application/json"}'
-                    class="code-textarea"
-                  />
-                </el-tab-pane>
-                <el-tab-pane label="请求参数" name="params">
-                  <el-input
-                    v-model="activeStep.requestParams"
-                    type="textarea"
-                    @blur="formatJsonField('requestParams')"
-                    :rows="4"
-                    placeholder='JSON格式，覆盖接口默认请求参数(body)&#10;可用${varName}引用上一步提取的变量&#10;如：{"userId":"${userId}","page":1}'
-                    class="code-textarea"
-                  />
-                </el-tab-pane>
-              </el-tabs>
-            </div>
-
-            <!-- 断言规则 -->
-            <div v-if="showAssertions" class="step-form-item">
-              <div class="field-label">断言规则</div>
-              <div class="assertion-list">
-                <div v-for="(a, idx) in activeStep.assertions" :key="idx" class="assertion-row">
-                  <el-select v-model="a.type" class="assertion-type">
-                    <el-option label="状态码" value="status" />
-                    <el-option label="JSONPath" value="jsonPath" />
-                    <el-option label="响应头" value="header" />
-                    <el-option label="响应体包含" value="body" />
-                  </el-select>
-
-                  <el-input
-                    v-if="a.type === 'jsonPath'"
-                    v-model="a.path"
-                    placeholder="JSONPath，如 $.code"
-                    class="assertion-path"
-                  />
-                  <el-input
-                    v-else-if="a.type === 'header'"
-                    v-model="a.path"
-                    placeholder="响应头名，如 Content-Type"
-                    class="assertion-path"
-                  />
-
-                  <el-select
-                    v-if="a.type === 'jsonPath' || a.type === 'header'"
-                    v-model="a.operator"
-                    placeholder="操作符"
-                    class="assertion-operator"
-                  >
-                    <el-option label="等于" value="eq" />
-                    <el-option label="不等于" value="notEq" />
-                    <el-option label="包含" value="contains" />
-                    <el-option label="存在" value="exists" />
-                  </el-select>
-
-                  <el-input
-                    v-if="showExpected(a)"
-                    v-model="a.expected"
-                    :placeholder="assertionExpectedPlaceholder(a)"
-                    class="assertion-expected"
-                  />
-
-                  <el-button link type="danger" :icon="Delete" @click="removeAssertion(idx)" />
-                </div>
-                <el-button type="primary" link :icon="Plus" @click="addAssertion">添加断言</el-button>
+          <!-- 后置扩展 -->
+          <el-card v-else-if="viewMode === 'post'" shadow="never" class="section-card extension-section">
+            <template #header>
+              <div class="detail-card-header">
+                <span class="section-title">后置扩展</span>
+                <el-button type="primary" size="small" :icon="Plus" @click="openExtensionDialog('post')">新增后置扩展</el-button>
               </div>
-            </div>
+            </template>
+            <extension-table
+              :steps="postSteps"
+              :component-map="componentMap"
+              @add="openExtensionDialog('post')"
+              @edit="(s) => openExtensionDialog('post', s)"
+              @delete="removeStepByUid"
+            />
           </el-card>
 
-          <!-- 未选中步骤时的占位 -->
-          <el-card v-else shadow="never" class="section-card detail-section detail-empty">
-            <el-empty description="请点击左侧步骤查看详情" :image-size="100" />
-          </el-card>
+          <!-- 用例步骤详情（保持原有样式） -->
+          <template v-else>
+            <el-card v-if="activeStep" shadow="never" class="section-card detail-section">
+              <template #header>
+                <div class="detail-card-header">
+                  <span class="section-title">当前接口:</span>
+                  <el-tag size="small" :type="methodTagType(getStepApiInfo(activeStep)!.method)" class="method-tag">
+                    {{ getStepApiInfo(activeStep)!.method }}
+                  </el-tag>
+                  <span v-if="getStepApiInfo(activeStep)" class="detail-api-path">{{ getStepApiInfo(activeStep)!.path }}</span>
+                  <el-button type="primary" link size="small" @click="openApiDialogForStep(currentMainUid!)">更换接口</el-button>
+                  <el-button type="primary" link size="small" @click="toggleAssertions">断言</el-button>
+                  <el-button type="primary" link size="small" @click="openDatasetDialog">数据源选择</el-button>
+                </div>
+              </template>
 
+              <!-- 响应变量名 -->
+              <div class="step-form-item">
+                <div class="field-label">响应变量名</div>
+                <el-input
+                  v-model="activeStep.responseVar"
+                  placeholder="给该接口响应数据命名，供后续步骤引用（如 loginResp），留空则不保存"
+                  clearable
+                />
+              </div>
+
+              <!-- 请求覆盖（拆分为请求头 / 请求参数） -->
+              <div class="request-override-section">
+                <el-tabs v-model="requestTab" class="request-tabs">
+                  <el-tab-pane label="请求头" name="headers">
+                    <el-input
+                      v-model="activeStep.requestHeaders"
+                      type="textarea"
+                      @blur="formatJsonField('requestHeaders')"
+                      :rows="4"
+                      placeholder='JSON格式，覆盖接口默认请求头&#10;可用${varName}引用上一步提取的变量&#10;如：{"Authorization":"Bearer ${token}","Content-Type":"application/json"}'
+                      class="code-textarea"
+                    />
+                  </el-tab-pane>
+                  <el-tab-pane label="请求参数" name="params">
+                    <el-input
+                      v-model="activeStep.requestParams"
+                      type="textarea"
+                      @blur="formatJsonField('requestParams')"
+                      :rows="4"
+                      placeholder='JSON格式，覆盖接口默认请求参数(body)&#10;可用${varName}引用上一步提取的变量&#10;如：{"userId":"${userId}","page":1}'
+                      class="code-textarea"
+                    />
+                  </el-tab-pane>
+                </el-tabs>
+              </div>
+
+              <!-- 断言规则 -->
+              <div v-if="showAssertions" class="step-form-item">
+                <div class="field-label">断言规则</div>
+                <div class="assertion-list">
+                  <div v-for="(a, idx) in activeStep.assertions" :key="idx" class="assertion-row">
+                    <el-select v-model="a.type" class="assertion-type">
+                      <el-option label="状态码" value="status" />
+                      <el-option label="JSONPath" value="jsonPath" />
+                      <el-option label="响应头" value="header" />
+                      <el-option label="响应体包含" value="body" />
+                    </el-select>
+
+                    <el-input
+                      v-if="a.type === 'jsonPath'"
+                      v-model="a.path"
+                      placeholder="JSONPath，如 $.code"
+                      class="assertion-path"
+                    />
+                    <el-input
+                      v-else-if="a.type === 'header'"
+                      v-model="a.path"
+                      placeholder="响应头名，如 Content-Type"
+                      class="assertion-path"
+                    />
+
+                    <el-select
+                      v-if="a.type === 'jsonPath' || a.type === 'header'"
+                      v-model="a.operator"
+                      placeholder="操作符"
+                      class="assertion-operator"
+                    >
+                      <el-option label="等于" value="eq" />
+                      <el-option label="不等于" value="notEq" />
+                      <el-option label="包含" value="contains" />
+                      <el-option label="存在" value="exists" />
+                    </el-select>
+
+                    <el-input
+                      v-if="showExpected(a)"
+                      v-model="a.expected"
+                      :placeholder="assertionExpectedPlaceholder(a)"
+                      class="assertion-expected"
+                    />
+
+                    <el-button link type="danger" :icon="Delete" @click="removeAssertion(idx)" />
+                  </div>
+                  <el-button type="primary" link :icon="Plus" @click="addAssertion">添加断言</el-button>
+                </div>
+              </div>
+            </el-card>
+
+            <el-card v-else shadow="never" class="section-card detail-section detail-empty">
+              <el-empty description="请点击左侧「用例步骤」下的接口查看详情" :image-size="100" />
+            </el-card>
+          </template>
         </div>
       </el-form>
     </div>
 
-    <!-- 接口选择弹框 -->
+    <!-- 接口选择弹框（新增/更换用例步骤） -->
     <el-dialog
       v-model="apiDialogVisible"
       title="选择接口"
@@ -327,7 +331,6 @@
               </el-option>
             </el-select>
           </el-form-item>
-          <!-- 选中接口的详细信息预览 -->
           <div v-if="apiDialogPreview" class="api-dialog-preview">
             <div class="preview-row">
               <span class="preview-label">请求方法</span>
@@ -351,6 +354,57 @@
       <template #footer>
         <el-button @click="apiDialogVisible = false">取消</el-button>
         <el-button type="primary" :disabled="!apiDialogSelectedId" @click="confirmApiSelect">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 前置/后置扩展弹框（选择公共接口组件） -->
+    <el-dialog
+      v-model="extDialogVisible"
+      :title="extDialogTitle"
+      width="560px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <el-form label-width="110px">
+        <el-form-item label="扩展类型" required>
+          <el-select v-model="extForm.type" class="ext-dialog-select">
+            <el-option :value="2" label="公共接口组件" />
+            <el-option :value="3" label="其他类型·生成随机数（后续实现）" disabled />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="选择组件" required>
+          <el-select
+            v-model="extForm.componentId"
+            placeholder="请选择公共接口组件"
+            filterable
+            class="ext-dialog-select"
+            @change="onExtComponentChange"
+          >
+            <el-option v-for="c in componentOptions" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="扩展名称">
+          <el-input v-model="extForm.stepName" placeholder="默认取组件名称" clearable />
+        </el-form-item>
+        <el-form-item label="返回数据变量">
+          <el-input v-model="extForm.responseVar" placeholder="如 token，供后续步骤 ${token} 引用" clearable />
+        </el-form-item>
+        <el-form-item label="是否禁用">
+          <el-switch v-model="extForm.isDisabled" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="提升全局变量">
+          <el-switch v-model="extForm.promoteGlobal" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="失败继续执行">
+          <el-switch v-model="extForm.continueOnFail" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="扩展说明">
+          <el-input v-model="extForm.description" type="textarea" :rows="2" placeholder="扩展说明（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="extDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!extForm.componentId" @click="confirmExtension">确定</el-button>
       </template>
     </el-dialog>
 
@@ -404,10 +458,6 @@
                 </div>
               </el-collapse-item>
               <el-collapse-item title="响应详情" :name="'resp' + ri + '-' + idx">
-                <div class="debug-kv">
-                  <div class="debug-kv-label">状态码</div>
-                  <div class="debug-status">{{ step.statusCode }}</div>
-                </div>
                 <div v-if="step.responseHeaders" class="debug-kv">
                   <div class="debug-kv-label">响应头</div>
                   <pre class="debug-pre">{{ formatJson(step.responseHeaders) }}</pre>
@@ -437,6 +487,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Bottom,
   Delete,
+  FolderOpened,
   Plus,
   Top
 } from '@element-plus/icons-vue'
@@ -444,12 +495,16 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { createCase, getCaseDetail, updateCase } from '@/api/case'
 import { getApiList, getModuleOptions, getProjectOptions, getVersionOptions } from '@/api/base'
 import { getEnvList } from '@/api/env'
+import { getComponentList } from '@/api/component'
 import { executeCase } from '@/api/execute'
 import DatasetSelectDialog from '@/views/dataset/components/DatasetSelectDialog.vue'
+import ExtensionTable from '@/views/case/ExtensionTable.vue'
 import type {
+  ApiComponentInfo,
   ApiInfo,
   AssertionItem,
   CaseExecuteResult,
+  CaseExtensionStep,
   EnvInfo,
   OptionItem,
   StepExecuteResult,
@@ -473,24 +528,9 @@ const moduleOptions = ref<OptionItem[]>([])
 
 const isEdit = computed(() => editingId.value !== null)
 
-/** 当前激活的步骤索引 */
-const activeStepIndex = ref<number | null>(null)
-
-/** 请求覆盖 Tab 当前激活标签 */
-const requestTab = ref('headers')
-
-/** 是否显示断言规则 */
-const showAssertions = ref(false)
-const showSetupScript = ref(false)
-
-/** 当前激活的步骤对象 */
-const activeStep = computed(() => {
-  if (activeStepIndex.value === null || activeStepIndex.value >= form.steps.length) return null
-  return form.steps[activeStepIndex.value]
-})
-
 /** 步骤表单内部类型（含 UI 扩展字段） */
 interface StepFormItem {
+  _uid: number
   apiId: number
   /** 接口名称（回显保留，避免依赖 apiOptions 查找） */
   apiName?: string
@@ -498,19 +538,33 @@ interface StepFormItem {
   apiMethod?: string
   /** 接口路径 */
   apiPath?: string
+  /** 步骤阶段：pre / main / post */
+  phase: string
+  /** 步骤类型：1 单接口 2 组合组件 3 其他类型 */
+  stepType: number
+  /** 组合组件ID（stepType=2） */
+  componentId?: number | null
+  /** 组合组件名称（UI 展示，不落库） */
+  componentName?: string
+  /** 全局组件映射（id → 名称），用于扩展表格展示 */
   sortOrder?: number
   stepName?: string
-  /** 响应变量名（为空则不保存该接口响应） */
+  /** 响应变量名 */
   responseVar?: string
   requestOverride?: string
   /** 断言规则（结构化，提交时序列化为 JSON） */
   assertions: AssertionItem[]
-  _expanded: boolean
-  /** UI 拆分：请求头（从 requestOverride.headers 解析） */
+  isDisabled: number
+  promoteGlobal: number
+  continueOnFail: number
+  description?: string
+  /** UI 拆分：请求头 */
   requestHeaders: string
-  /** UI 拆分：请求参数（从 requestOverride.body/params 解析） */
+  /** UI 拆分：请求参数 */
   requestParams: string
 }
+
+let uidSeq = 1
 
 const form = reactive({
   caseName: '',
@@ -525,7 +579,6 @@ const form = reactive({
 
 /** 数据源选择弹窗开关 */
 const datasetDialogVisible = ref(false)
-
 function openDatasetDialog() {
   datasetDialogVisible.value = true
 }
@@ -545,73 +598,113 @@ const rules: FormRules = {
   moduleId: [{ required: true, message: '请选择模块', trigger: 'change' }]
 }
 
-/* ---- 接口选择弹框状态 ---- */
-const apiDialogVisible = ref(false)
-const apiDialogSelectedId = ref<number | null>(null)
-/** 记录弹框是为哪个步骤打开的（null = 新增步骤，数字 = 更换第 N 步的接口） */
-const apiDialogTargetIndex = ref<number | null>(null)
-
-/** 弹框中选中的接口详情（用于预览） */
-const apiDialogPreview = computed(() => {
-  if (!apiDialogSelectedId.value) return null
-  return apiOptions.value.find((a) => a.id === apiDialogSelectedId.value) || null
+/* ---- 步骤导航树 ---- */
+const currentGroup = ref<'pre' | 'main' | 'post'>('main')
+const currentMainUid = ref<number | null>(null)
+const viewMode = computed<'pre' | 'post' | 'detail'>(() => {
+  if (currentGroup.value === 'pre') return 'pre'
+  if (currentGroup.value === 'post') return 'post'
+  return 'detail'
 })
 
-/** 打开弹框 — 新增步骤 */
-function openApiDialog() {
-  apiDialogTargetIndex.value = null
-  apiDialogSelectedId.value = null
-  apiDialogVisible.value = true
-}
+const preSteps = computed(() => form.steps.filter((s) => s.phase === 'pre'))
+const mainSteps = computed(() => form.steps.filter((s) => s.phase === 'main'))
+const postSteps = computed(() => form.steps.filter((s) => s.phase === 'post'))
 
-/** 打开弹框 — 更换已有步骤的接口 */
-function openApiDialogForStep(index: number) {
-  apiDialogTargetIndex.value = index
-  apiDialogSelectedId.value = null
-  apiDialogVisible.value = true
-}
+const activeStep = computed<StepFormItem | null>(() => {
+  if (currentGroup.value !== 'main' || currentMainUid.value == null) return null
+  return form.steps.find((s) => s._uid === currentMainUid.value) || null
+})
 
-/** 确认选择接口 */
-function confirmApiSelect() {
-  if (!apiDialogSelectedId.value) return
-  const api = apiOptions.value.find((a) => a.id === apiDialogSelectedId.value)
-  if (!api) return
-
-  if (apiDialogTargetIndex.value !== null) {
-    // 更换已有步骤的接口
-    const step = form.steps[apiDialogTargetIndex.value]
-    step.apiId = api.id
-    step.apiName = api.name
-    step.apiMethod = api.method
-    step.apiPath = api.path
-    if (!step.stepName) {
-      step.stepName = api.name
-    }
-  } else {
-    // 新增步骤
-    form.steps.push({
-      apiId: api.id,
-      apiName: api.name,
-      apiMethod: api.method,
-      apiPath: api.path,
-      sortOrder: form.steps.length + 1,
-      stepName: api.name,
-      requestOverride: '',
-      requestHeaders: '',
-      requestParams: '',
-      assertions: [],
-      _expanded: false
-    })
+const treeData = computed(() => [
+  {
+    key: 'g-pre',
+    type: 'group',
+    label: '前置步骤',
+    phase: 'pre',
+    count: preSteps.value.length,
+    children: []
+  },
+  {
+    key: 'g-main',
+    type: 'group',
+    label: '用例步骤',
+    phase: 'main',
+    count: mainSteps.value.length,
+    children: mainSteps.value.map((s, i) => ({
+      key: 'm-' + s._uid,
+      type: 'step',
+      uid: s._uid,
+      order: i + 1
+    }))
+  },
+  {
+    key: 'g-post',
+    type: 'group',
+    label: '后置步骤',
+    phase: 'post',
+    count: postSteps.value.length,
+    children: []
   }
-  // 选中新添加/更换的步骤
-  const targetIdx = apiDialogTargetIndex.value !== null ? apiDialogTargetIndex.value : form.steps.length - 1
-  activeStepIndex.value = targetIdx
-  apiDialogVisible.value = false
+])
+
+function isGroupActive(data: { type: string; phase: string }): boolean {
+  return data.type === 'group' && data.phase === currentGroup.value
 }
 
-/** 点击步骤选中 */
-function selectStep(index: number) {
-  activeStepIndex.value = index
+function stepByUid(uid: number): StepFormItem | undefined {
+  return form.steps.find((s) => s._uid === uid)
+}
+
+function handleNodeClick(data: { type: string; phase?: string; uid?: number }) {
+  if (data.type === 'group') {
+    currentGroup.value = (data.phase as 'pre' | 'main' | 'post') || 'main'
+    currentMainUid.value = null
+  } else if (data.type === 'step' && data.uid != null) {
+    currentGroup.value = 'main'
+    currentMainUid.value = data.uid
+  }
+}
+
+function isFirstInPhase(uid: number): boolean {
+  const s = stepByUid(uid)
+  if (!s) return true
+  const list = form.steps.filter((x) => x.phase === s.phase)
+  return list[0]?._uid === uid
+}
+function isLastInPhase(uid: number): boolean {
+  const s = stepByUid(uid)
+  if (!s) return true
+  const list = form.steps.filter((x) => x.phase === s.phase)
+  return list[list.length - 1]?._uid === uid
+}
+
+/** 在当前阶段内上移/下移步骤（保持分组顺序） */
+function moveWithinPhase(uid: number, dir: number) {
+  const s = stepByUid(uid)
+  if (!s) return
+  const list = form.steps.filter((x) => x.phase === s.phase)
+  const idx = list.findIndex((x) => x._uid === uid)
+  const target = idx + dir
+  if (target < 0 || target >= list.length) return
+  ;[list[idx], list[target]] = [list[target], list[idx]]
+  rebuildGrouped()
+}
+
+/** 按 前置→主→后置 重新规整数组顺序 */
+function rebuildGrouped() {
+  form.steps = [...preSteps.value, ...mainSteps.value, ...postSteps.value]
+}
+
+function removeStepByUid(uid: number) {
+  const idx = form.steps.findIndex((s) => s._uid === uid)
+  if (idx < 0) return
+  const phase = form.steps[idx].phase
+  form.steps.splice(idx, 1)
+  if (phase === 'main' && currentMainUid.value === uid) {
+    const remain = mainSteps.value
+    currentMainUid.value = remain.length ? remain[0]._uid : null
+  }
 }
 
 /** 请求方法 -> 标签颜色 */
@@ -629,6 +722,159 @@ function methodTagType(method: string | null): '' | 'success' | 'warning' | 'dan
 
 function goBack() {
   router.push('/case')
+}
+
+/* ---- 接口选择弹框（用例步骤） ---- */
+const apiDialogVisible = ref(false)
+const apiDialogSelectedId = ref<number | null>(null)
+const apiDialogTargetUid = ref<number | null>(null)
+
+const apiDialogPreview = computed(() => {
+  if (!apiDialogSelectedId.value) return null
+  return apiOptions.value.find((a) => a.id === apiDialogSelectedId.value) || null
+})
+
+function openApiDialog() {
+  apiDialogTargetUid.value = null
+  apiDialogSelectedId.value = null
+  apiDialogVisible.value = true
+}
+
+function openApiDialogForStep(uid: number) {
+  apiDialogTargetUid.value = uid
+  apiDialogSelectedId.value = null
+  apiDialogVisible.value = true
+}
+
+function confirmApiSelect() {
+  if (!apiDialogSelectedId.value) return
+  const api = apiOptions.value.find((a) => a.id === apiDialogSelectedId.value)
+  if (!api) return
+
+  if (apiDialogTargetUid.value !== null) {
+    const step = stepByUid(apiDialogTargetUid.value)
+    if (!step) return
+    step.apiId = api.id
+    step.apiName = api.name
+    step.apiMethod = api.method
+    step.apiPath = api.path
+    if (!step.stepName) step.stepName = api.name
+  } else {
+    form.steps.push({
+      _uid: uidSeq++,
+      apiId: api.id,
+      apiName: api.name,
+      apiMethod: api.method,
+      apiPath: api.path,
+      phase: 'main',
+      stepType: 1,
+      componentId: null,
+      sortOrder: 0,
+      stepName: api.name,
+      requestOverride: '',
+      requestHeaders: '',
+      requestParams: '',
+      assertions: [],
+      isDisabled: 0,
+      promoteGlobal: 0,
+      continueOnFail: 0,
+      description: ''
+    })
+  }
+  apiDialogVisible.value = false
+}
+
+/* ---- 前置/后置扩展弹框 ---- */
+const extDialogVisible = ref(false)
+const extDialogPhase = ref<'pre' | 'post'>('pre')
+const extDialogTitle = computed(() => (extDialogPhase.value === 'pre' ? '新增前置扩展' : '新增后置扩展'))
+const componentOptions = ref<ApiComponentInfo[]>([])
+const componentMap = ref<Record<number, string>>({})
+const editingExtUid = ref<number | null>(null)
+
+const extForm = reactive({
+  type: 2,
+  componentId: null as number | null,
+  stepName: '',
+  responseVar: '',
+  isDisabled: 0,
+  promoteGlobal: 0,
+  continueOnFail: 0,
+  description: ''
+})
+
+function openExtensionDialog(phase: 'pre' | 'post', step?: CaseExtensionStep) {
+  extDialogPhase.value = phase
+  editingExtUid.value = step ? step._uid : null
+  if (step) {
+    extForm.type = step.stepType || 2
+    extForm.componentId = step.componentId ?? null
+    extForm.stepName = step.stepName || ''
+    extForm.responseVar = step.responseVar || ''
+    extForm.isDisabled = step.isDisabled
+    extForm.promoteGlobal = step.promoteGlobal
+    extForm.continueOnFail = step.continueOnFail
+    extForm.description = step.description || ''
+  } else {
+    extForm.type = 2
+    extForm.componentId = null
+    extForm.stepName = ''
+    extForm.responseVar = ''
+    extForm.isDisabled = 0
+    extForm.promoteGlobal = 0
+    extForm.continueOnFail = 0
+    extForm.description = ''
+  }
+  extDialogVisible.value = true
+}
+
+function onExtComponentChange(id: number) {
+  const c = componentOptions.value.find((x) => x.id === id)
+  extForm.stepName = c ? c.name : ''
+}
+
+function confirmExtension() {
+  if (!extForm.componentId) return
+  const c = componentOptions.value.find((x) => x.id === extForm.componentId!)
+  const phase = extDialogPhase.value
+  if (editingExtUid.value != null) {
+    const step = stepByUid(editingExtUid.value)
+    if (step) {
+      step.stepType = extForm.type
+      step.componentId = extForm.componentId
+      step.componentName = c?.name
+      step.stepName = extForm.stepName || c?.name || ''
+      step.responseVar = extForm.responseVar.trim() || undefined
+      step.isDisabled = extForm.isDisabled
+      step.promoteGlobal = extForm.promoteGlobal
+      step.continueOnFail = extForm.continueOnFail
+      step.description = extForm.description.trim() || undefined
+    }
+  } else {
+    form.steps.push({
+      _uid: uidSeq++,
+      apiId: 0,
+      apiName: undefined,
+      apiMethod: undefined,
+      apiPath: undefined,
+      phase,
+      stepType: extForm.type,
+      componentId: extForm.componentId,
+      componentName: c?.name,
+      sortOrder: 0,
+      stepName: extForm.stepName || c?.name || '',
+      requestOverride: '',
+      requestHeaders: '',
+      requestParams: '',
+      assertions: [],
+      responseVar: extForm.responseVar.trim() || undefined,
+      isDisabled: extForm.isDisabled,
+      promoteGlobal: extForm.promoteGlobal,
+      continueOnFail: extForm.continueOnFail,
+      description: extForm.description.trim() || undefined
+    })
+  }
+  extDialogVisible.value = false
 }
 
 /* ---- 调试 ---- */
@@ -728,7 +974,6 @@ async function loadModuleOptions(versionId: number) {
   }
 }
 
-/** 工程变更 → 重置版本和模块，加载版本选项 */
 function onApplicationChange(appId: number) {
   form.versionId = null
   form.moduleId = null
@@ -740,7 +985,6 @@ function onApplicationChange(appId: number) {
   loadApiOptions()
 }
 
-/** 版本变更 → 重置模块，加载模块选项 */
 function onVersionChange(versionId: number) {
   form.moduleId = null
   moduleOptions.value = []
@@ -750,7 +994,6 @@ function onVersionChange(versionId: number) {
   loadApiOptions()
 }
 
-/** 模块变更 → 按模块过滤接口列表 */
 function onModuleChange() {
   loadApiOptions()
 }
@@ -776,55 +1019,38 @@ async function loadApiOptions() {
   }
 }
 
-/** 删除步骤 */
-function removeStep(index: number) {
-  form.steps.splice(index, 1)
-  form.steps.forEach((s, i) => {
-    s.sortOrder = i + 1
-  })
-  // 调整激活步骤索引
-  if (form.steps.length === 0) {
-    activeStepIndex.value = null
-  } else if (activeStepIndex.value !== null) {
-    if (activeStepIndex.value >= form.steps.length) {
-      activeStepIndex.value = form.steps.length - 1
-    } else if (activeStepIndex.value > index) {
-      activeStepIndex.value--
-    } else if (activeStepIndex.value === index) {
-      activeStepIndex.value = Math.min(index, form.steps.length - 1)
-    }
+async function loadComponentOptions() {
+  const projectId = projectStore.currentProject?.id
+  if (!projectId) {
+    componentOptions.value = []
+    return
   }
-}
-
-/** 移动步骤 */
-function moveStep(index: number, direction: number) {
-  const targetIndex = index + direction
-  if (targetIndex < 0 || targetIndex >= form.steps.length) return
-  const temp = form.steps[index]
-  form.steps[index] = form.steps[targetIndex]
-  form.steps[targetIndex] = temp
-  form.steps.forEach((s, i) => {
-    s.sortOrder = i + 1
-  })
-  // 如果移动的是当前激活步骤，更新索引
-  if (activeStepIndex.value === index) {
-    activeStepIndex.value = targetIndex
-  } else if (activeStepIndex.value === targetIndex) {
-    activeStepIndex.value = index
+  try {
+    const result = await getComponentList({ projectId, page: 1, size: 500 })
+    componentOptions.value = result.records
+    const map: Record<number, string> = {}
+    result.records.forEach((c) => {
+      map[c.id] = c.name
+    })
+    componentMap.value = map
+  } catch {
+    componentOptions.value = []
   }
 }
 
 /** 获取步骤对应的接口信息 */
-function getStepApiInfo(step: StepFormItem): ApiInfo | undefined {
+function getStepApiInfo(step: StepFormItem): Pick<ApiInfo, 'id' | 'name' | 'method' | 'path'> | undefined {
   if (step.apiMethod || step.apiPath) {
     return {
       id: step.apiId,
       name: step.apiName || '',
       method: step.apiMethod || '',
       path: step.apiPath || ''
-    } as ApiInfo
+    }
   }
-  return apiOptions.value.find((a) => a.id === step.apiId)
+  const found = apiOptions.value.find((a) => a.id === step.apiId)
+  if (!found) return undefined
+  return { id: found.id, name: found.name, method: found.method, path: found.path }
 }
 
 /** 将 requestOverride JSON 拆分为 headers 和 params */
@@ -853,7 +1079,6 @@ function buildRequestOverride(headers: string, params: string): string {
   return hasContent ? JSON.stringify(obj) : ''
 }
 
-/** JSON 格式校验 */
 function isValidJson(str: string): boolean {
   if (!str.trim()) return true
   try {
@@ -864,13 +1089,11 @@ function isValidJson(str: string): boolean {
   }
 }
 
-/** 断言序列化：结构化列表 → JSON 字符串 */
 function serializeAssertions(list: AssertionItem[]): string | undefined {
   const valid = list.filter((a) => a.type)
   return valid.length > 0 ? JSON.stringify(valid) : undefined
 }
 
-/** 断言反序列化：JSON 字符串 → 结构化列表 */
 function parseAssertions(json: string | null | undefined): AssertionItem[] {
   if (!json) return []
   try {
@@ -881,27 +1104,20 @@ function parseAssertions(json: string | null | undefined): AssertionItem[] {
   }
 }
 
-/** 添加断言 */
 function addAssertion() {
   if (!activeStep.value) return
   activeStep.value.assertions.push({ type: 'status' })
 }
 
-/** 切换断言规则显示 */
 function toggleAssertions() {
   showAssertions.value = !showAssertions.value
 }
 
-function toggleSetupScript(){
-  showSetupScript.value=!showSetupScript.value
-}
-/** 删除断言 */
 function removeAssertion(index: number) {
   if (!activeStep.value) return
   activeStep.value.assertions.splice(index, 1)
 }
 
-/** 是否显示期望值输入框 */
 function showExpected(a: AssertionItem): boolean {
   if (a.type === 'jsonPath' || a.type === 'header') {
     return a.operator !== 'exists'
@@ -909,7 +1125,6 @@ function showExpected(a: AssertionItem): boolean {
   return true
 }
 
-/** 期望值占位提示 */
 function assertionExpectedPlaceholder(a: AssertionItem): string {
   switch (a.type) {
     case 'status':
@@ -923,6 +1138,10 @@ function assertionExpectedPlaceholder(a: AssertionItem): string {
   }
 }
 
+/** 请求覆盖 Tab 当前激活标签 */
+const requestTab = ref('headers')
+const showAssertions = ref(false)
+
 async function handleSubmit() {
   if (!formEl.value) return
   const valid = await formEl.value.validate().catch(() => false)
@@ -931,19 +1150,23 @@ async function handleSubmit() {
   // 步骤校验
   for (let i = 0; i < form.steps.length; i++) {
     const step = form.steps[i]
-    if (!step.apiId) {
-      ElMessage.error(`第 ${i + 1} 步未选择接口`)
-      activeStepIndex.value = i
-      return
+    if (step.phase === 'main') {
+      if (!step.apiId) {
+        ElMessage.error(`第 ${i + 1} 步未选择接口`)
+        return
+      }
+    } else if (step.stepType === 2) {
+      if (!step.componentId) {
+        ElMessage.error(`第 ${i + 1} 步前置/后置扩展未选择公共接口组件`)
+        return
+      }
     }
     if (step.requestHeaders?.trim() && !isValidJson(step.requestHeaders)) {
       ElMessage.error(`第 ${i + 1} 步请求头不是合法的 JSON`)
-      activeStepIndex.value = i
       return
     }
     if (step.requestParams?.trim() && !isValidJson(step.requestParams)) {
       ElMessage.error(`第 ${i + 1} 步请求参数不是合法的 JSON`)
-      activeStepIndex.value = i
       return
     }
   }
@@ -954,17 +1177,26 @@ async function handleSubmit() {
     return
   }
 
+  // 按 前置→主→后置 顺序提交，统一 sortOrder
+  rebuildGrouped()
+  const stepsPayload: StepParams[] = form.steps.map((s, i) => ({
+    apiId: s.phase === 'main' ? s.apiId : undefined,
+    phase: s.phase,
+    stepType: s.stepType,
+    componentId: s.stepType === 2 ? s.componentId ?? undefined : undefined,
+    sortOrder: i + 1,
+    stepName: s.stepName?.trim() || undefined,
+    requestOverride: buildRequestOverride(s.requestHeaders, s.requestParams) || undefined,
+    assertions: serializeAssertions(s.assertions),
+    responseVar: s.responseVar?.trim() || undefined,
+    isDisabled: s.isDisabled,
+    promoteGlobal: s.promoteGlobal,
+    continueOnFail: s.continueOnFail,
+    description: s.description?.trim() || undefined
+  }))
+
   submitting.value = true
   try {
-    const stepsPayload: StepParams[] = form.steps.map((s, i) => ({
-      apiId: s.apiId,
-      sortOrder: i + 1,
-      stepName: s.stepName?.trim() || undefined,
-      requestOverride: buildRequestOverride(s.requestHeaders, s.requestParams) || undefined,
-      assertions: serializeAssertions(s.assertions),
-      responseVar: s.responseVar?.trim() || undefined
-    }))
-
     const payload = {
       applicationId: form.applicationId!,
       versionId: form.versionId!,
@@ -990,12 +1222,10 @@ async function handleSubmit() {
 }
 
 onMounted(async () => {
-  // 加载工程下拉
   await loadAppOptions()
-  // 加载环境下拉（调试用）
   await loadEnvOptions()
+  await loadComponentOptions()
 
-  // 判断是编辑还是新增
   const caseId = route.query.id
   if (caseId) {
     editingId.value = Number(caseId)
@@ -1011,10 +1241,15 @@ onMounted(async () => {
       form.steps = (detail.steps || []).map((s) => {
         const { headers, params } = parseRequestOverride(s.requestOverride)
         return {
+          _uid: uidSeq++,
           apiId: s.apiId,
           apiName: s.apiName || undefined,
           apiMethod: s.apiMethod || undefined,
           apiPath: s.apiPath || undefined,
+          phase: s.phase || 'main',
+          stepType: s.stepType || 1,
+          componentId: s.componentId ?? null,
+          componentName: s.componentId ? componentMap.value[s.componentId] : undefined,
           sortOrder: s.sortOrder,
           stepName: s.stepName || '',
           requestOverride: s.requestOverride || '',
@@ -1022,16 +1257,25 @@ onMounted(async () => {
           requestHeaders: headers,
           requestParams: params,
           assertions: parseAssertions(s.assertions),
-          _expanded: false
-        }
+          isDisabled: s.isDisabled ?? 0,
+          promoteGlobal: s.promoteGlobal ?? 0,
+          continueOnFail: s.continueOnFail ?? 0,
+          description: s.description || undefined
+        } as StepFormItem
       })
 
-      // 默认选中第一个步骤
-      if (form.steps.length > 0) {
-        activeStepIndex.value = 0
+      const mains = mainSteps.value
+      if (mains.length > 0) {
+        currentGroup.value = 'main'
+        currentMainUid.value = mains[0]._uid
+      } else if (preSteps.value.length > 0) {
+        currentGroup.value = 'pre'
+        currentMainUid.value = null
+      } else if (postSteps.value.length > 0) {
+        currentGroup.value = 'post'
+        currentMainUid.value = null
       }
 
-      // 级联加载版本和模块选项
       if (detail.applicationId) {
         await loadVersionOptions(detail.applicationId)
       }
@@ -1043,7 +1287,6 @@ onMounted(async () => {
     }
   }
 
-  // 加载接口选项
   await loadApiOptions()
 })
 </script>
@@ -1085,15 +1328,6 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.page-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-right: 16px;
-  flex-shrink: 0;
-}
-
-/* 顶部栏表单项样式 */
 .bar-form-item {
   margin-bottom: 0 !important;
 }
@@ -1166,7 +1400,7 @@ onMounted(async () => {
   color: #1f2937;
 }
 
-/* ---------- 步骤列表 ---------- */
+/* ---------- 步骤导航树 ---------- */
 .steps-section {
   min-height: 400px;
 }
@@ -1175,6 +1409,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .steps-header-actions {
@@ -1183,52 +1419,70 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.steps-hint {
-  color: #9ca3af;
-}
-
-.steps-empty {
-  padding: 40px 0;
-}
-
-.steps-list {
+.debug-bar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.step-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+.debug-env-select {
+  width: 160px;
 }
 
-.step-card:hover {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  border-color: #c0c4cc;
+.step-tree {
+  margin-top: 6px;
 }
 
-.step-card.step-active {
-  border-color: #409eff;
-  background: #ecf5ff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+.step-tree :deep(.el-tree-node__content) {
+  height: auto;
+  padding: 4px 0;
 }
 
-.step-header {
+.tree-group {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  padding: 6px 8px;
+  border-radius: 6px;
 }
 
-.step-order {
+.tree-group.tree-group-active {
+  background: #ecf5ff;
+  color: #1677ff;
+}
+
+.tree-group-icon {
+  font-size: 16px;
+}
+
+.tree-group-badge {
+  margin-left: 4px;
+}
+
+.tree-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-step.tree-step-active {
+  background: #ecf5ff;
+}
+
+.tree-step-order {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #409eff;
   color: #fff;
@@ -1237,21 +1491,13 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.step-card.step-active .step-order {
-  background: #1677ff;
-}
-
-/* 步骤头部接口信息展示 */
-.step-api-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.tree-step-api {
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
 
-.step-api-path {
+.tree-step-path {
   color: #374151;
   font-size: 13px;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -1260,26 +1506,23 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.step-api-name {
-  color: #6b7280;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.step-api-missing {
+.tree-step-missing {
   color: #f56c6c;
   font-size: 13px;
   flex: 1;
 }
 
-.step-actions {
+.tree-step-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* ---------- 前置/后置扩展 ---------- */
+.extension-section {
+  min-height: 300px;
 }
 
 /* ---------- 请求覆盖 Tabs ---------- */
@@ -1368,12 +1611,6 @@ onMounted(async () => {
   flex: 1;
 }
 
-.step-extract-hint {
-  margin-top: -6px;
-  margin-bottom: 14px;
-  padding-left: 0;
-}
-
 /* ---------- 接口标签 ---------- */
 .method-tag {
   margin-right: 0;
@@ -1445,6 +1682,11 @@ onMounted(async () => {
 .preview-value {
   font-size: 13px;
   color: #1f2937;
+}
+
+/* 扩展弹框 */
+.ext-dialog-select {
+  width: 100%;
 }
 
 /* ---------- 代码文本框 ---------- */
@@ -1579,66 +1821,5 @@ onMounted(async () => {
   gap: 8px;
   margin-bottom: 6px;
   font-size: 13px;
-}
-
-/* ---------- 参数化数据 ---------- */
-.dataset-section {
-  margin-top: 12px;
-}
-
-.dataset-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.dataset-tip {
-  color: #9ca3af;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.dataset-entry {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.dataset-summary {
-  color: #374151;
-  font-size: 13px;
-}
-
-.dataset-empty {
-  color: #9ca3af;
-  font-size: 13px;
-}
-
-.dataset-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 8px;
-}
-
-.dataset-th,
-.dataset-td {
-  padding: 4px;
-  border: 1px solid #e5e7eb;
-}
-
-.dataset-th-inner {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.dataset-op-col {
-  width: 60px;
-  text-align: center;
-}
-
-.dataset-actions {
-  display: flex;
-  gap: 8px;
 }
 </style>

@@ -221,26 +221,80 @@ CREATE TABLE `tb_plan_case`
     KEY `idx_plan` (`plan_id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='计划用例关联表';
 
--- 用例步骤表（第二阶段扩展：多接口串行+参数传递）
+-- 用例步骤表（第二阶段扩展：多接口串行+参数传递；第三阶段扩展：前置/后置扩展 + 组合组件引用）
 DROP TABLE IF EXISTS `tb_case_step`;
 CREATE TABLE `tb_case_step`
 (
-    `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    `case_id`          BIGINT       NOT NULL COMMENT '用例ID',
-    `api_id`           BIGINT       NOT NULL COMMENT '关联接口ID',
-    `sort_order`       INT          NOT NULL DEFAULT 0 COMMENT '执行顺序(从1开始)',
-    `step_name`        VARCHAR(200) DEFAULT NULL COMMENT '步骤名称',
-    `request_override` JSON         DEFAULT NULL COMMENT '请求覆盖内容(headers/body/params)',
-    `assertions`       JSON         DEFAULT NULL COMMENT '步骤断言规则',
-    `response_var`     VARCHAR(100) DEFAULT NULL COMMENT '响应变量名',
-    `create_time`      DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    `update_time`      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted`          TINYINT      DEFAULT 0,
+    `id`                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `case_id`           BIGINT       NOT NULL COMMENT '用例ID',
+    `api_id`            BIGINT       DEFAULT NULL COMMENT '关联接口ID(step_type=1时必填)',
+    `phase`             VARCHAR(10)  NOT NULL DEFAULT 'main' COMMENT '步骤阶段 pre-前置/main-主步骤/post-后置',
+    `step_type`         TINYINT      NOT NULL DEFAULT 1 COMMENT '步骤类型 1-单接口 2-组合组件 3-其他类型',
+    `component_id`      BIGINT       DEFAULT NULL COMMENT '组合组件ID(step_type=2时引用)',
+    `sort_order`        INT          NOT NULL DEFAULT 0 COMMENT '执行顺序(从1开始)',
+    `step_name`         VARCHAR(200) DEFAULT NULL COMMENT '步骤名称',
+    `request_override`  JSON         DEFAULT NULL COMMENT '请求覆盖内容(headers/body/params)',
+    `assertions`        JSON         DEFAULT NULL COMMENT '步骤断言规则',
+    `response_var`      VARCHAR(100) DEFAULT NULL COMMENT '响应变量名',
+    `is_disabled`       TINYINT      NOT NULL DEFAULT 0 COMMENT '是否禁用 0-否 1-是',
+    `promote_global`    TINYINT      NOT NULL DEFAULT 0 COMMENT '提升为全局变量 0-否 1-是',
+    `continue_on_fail`  TINYINT      NOT NULL DEFAULT 0 COMMENT '失败后继续执行 0-否 1-是',
+    `description`       VARCHAR(500) DEFAULT NULL COMMENT '扩展说明',
+    `create_time`       DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`       DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`           TINYINT      DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_case` (`case_id`),
-    KEY `idx_api` (`api_id`)
+    KEY `idx_api` (`api_id`),
+    KEY `idx_component` (`component_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='用例步骤表';
+
+-- 组合组件表（可复用的公共接口片段，项目内共享，挂在模块树下）
+DROP TABLE IF EXISTS `tb_api_component`;
+CREATE TABLE `tb_api_component`
+(
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `project_id`  BIGINT       NOT NULL COMMENT '项目ID(项目隔离)',
+    `module_id`   BIGINT       DEFAULT NULL COMMENT '所属模块ID(模块树定位)',
+    `name`        VARCHAR(100) NOT NULL COMMENT '组件名称',
+    `description` VARCHAR(500) DEFAULT NULL COMMENT '组件描述',
+    `create_by`   BIGINT       DEFAULT NULL COMMENT '创建人ID',
+    `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time` DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`     TINYINT      DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_project` (`project_id`),
+    KEY `idx_module` (`module_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='组合组件表';
+
+-- 组合组件步骤表（组件内可包含单接口步骤，也可嵌套另一个组件）
+DROP TABLE IF EXISTS `tb_api_component_step`;
+CREATE TABLE `tb_api_component_step`
+(
+    `id`                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `component_id`      BIGINT       NOT NULL COMMENT '所属组件ID',
+    `step_type`         TINYINT      NOT NULL DEFAULT 1 COMMENT '步骤类型 1-单接口 2-嵌套组件',
+    `api_id`            BIGINT       DEFAULT NULL COMMENT '关联接口ID(step_type=1时必填)',
+    `child_component_id` BIGINT      DEFAULT NULL COMMENT '嵌套组件ID(step_type=2时引用)',
+    `sort_order`        INT          NOT NULL DEFAULT 0 COMMENT '执行顺序(从1开始)',
+    `step_name`         VARCHAR(200) DEFAULT NULL COMMENT '步骤名称',
+    `request_override`  JSON         DEFAULT NULL COMMENT '请求覆盖内容(headers/body/params)',
+    `assertions`        JSON         DEFAULT NULL COMMENT '步骤断言规则',
+    `response_var`      VARCHAR(100) DEFAULT NULL COMMENT '响应变量名',
+    `is_disabled`       TINYINT      NOT NULL DEFAULT 0 COMMENT '是否禁用 0-否 1-是',
+    `continue_on_fail`  TINYINT      NOT NULL DEFAULT 0 COMMENT '失败后继续执行 0-否 1-是',
+    `description`       VARCHAR(500) DEFAULT NULL COMMENT '步骤说明',
+    `create_time`       DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time`       DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`           TINYINT      DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_component` (`component_id`),
+    KEY `idx_api` (`api_id`),
+    KEY `idx_child_component` (`child_component_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='组合组件步骤表';
 
 -- 用例参数化数据集表（第三阶段）
 DROP TABLE IF EXISTS `tb_dataset_template`;
@@ -318,6 +372,9 @@ CREATE TABLE `tb_execution_detail`
     `round_index`      INT          NOT NULL DEFAULT 1 COMMENT '轮次（参数化多轮从1起）',
     `step_index`       INT          NOT NULL DEFAULT 0 COMMENT '步骤序号（同轮内排序）',
     `step_id`          BIGINT       DEFAULT NULL COMMENT '步骤ID快照',
+    `component_id`     BIGINT       DEFAULT NULL COMMENT '所属组合组件ID(组件展开子步骤时填写)',
+    `parent_step_id`   BIGINT       DEFAULT NULL COMMENT '父步骤ID(组件展开时为容器步骤ID)',
+    `nest_level`       INT          NOT NULL DEFAULT 0 COMMENT '嵌套层级(0-用例直接步骤 1-组件内 2-嵌套组件内)',
     `step_name`        VARCHAR(200) DEFAULT NULL COMMENT '步骤名称快照',
     `method`           VARCHAR(10)  DEFAULT NULL COMMENT '实际请求方法',
     `url`              VARCHAR(1000) DEFAULT NULL COMMENT '实际请求URL',

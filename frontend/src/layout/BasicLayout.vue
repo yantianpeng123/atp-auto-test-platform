@@ -44,6 +44,10 @@
             <el-icon><Link /></el-icon>
             <span>接口列表</span>
           </el-menu-item>
+          <el-menu-item index="/base/component">
+            <el-icon><Share /></el-icon>
+            <span>组合组件</span>
+          </el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="run">
@@ -172,6 +176,7 @@ import {
   Link,
   Odometer,
   Setting,
+  Share,
   Switch,
   SwitchButton,
   Timer,

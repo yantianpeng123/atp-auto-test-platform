@@ -1,6 +1,6 @@
-package com.atp.module.testcase.mapper;
+package com.atp.module.base.mapper;
 
-import com.atp.module.testcase.entity.CaseStep;
+import com.atp.module.base.entity.ApiComponentStep;
 import com.atp.module.testcase.vo.CaseStepVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
@@ -10,38 +10,35 @@ import org.apache.ibatis.annotations.Select;
 import java.util.List;
 
 /**
- * 用例步骤数据访问
+ * 组合组件步骤数据访问
  */
 @Mapper
-public interface CaseStepMapper extends BaseMapper<CaseStep> {
+public interface ApiComponentStepMapper extends BaseMapper<ApiComponentStep> {
 
     /**
-     * 查询用例下的所有步骤（按执行顺序排列，左连接接口定义带出接口信息）
+     * 查询组件下的步骤（按执行顺序，左连接接口定义带出接口信息）。
+     * 复用 CaseStepVO 结构，便于执行引擎直接展开执行。
      */
     @Select("""
             SELECT s.id,
-                   s.case_id,
-                   s.api_id,
-                   s.phase,
-                   s.step_type,
                    s.component_id,
+                   s.step_type,
+                   s.child_component_id AS componentId,
+                   s.api_id            AS apiId,
                    s.sort_order,
                    s.step_name,
                    s.request_override,
                    s.assertions,
                    s.response_var,
                    s.is_disabled,
-                   s.promote_global,
-                   s.continue_on_fail,
-                   s.description,
                    a.name   AS api_name,
                    a.method AS api_method,
                    a.path   AS api_path
-            FROM tb_case_step s
+            FROM tb_api_component_step s
             LEFT JOIN tb_api_definition a ON s.api_id = a.id AND a.deleted = 0
             WHERE s.deleted = 0
-              AND s.case_id = #{caseId}
-            ORDER BY FIELD(s.phase, 'pre', 'main', 'post'), s.sort_order ASC
+              AND s.component_id = #{componentId}
+            ORDER BY s.sort_order ASC
             """)
-    List<CaseStepVO> selectStepsByCaseId(@Param("caseId") Long caseId);
+    List<CaseStepVO> selectComponentSteps(@Param("componentId") Long componentId);
 }

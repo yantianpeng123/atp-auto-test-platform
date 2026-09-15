@@ -46,6 +46,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '接口列表', icon: 'Link' }
       },
       {
+        path: 'base/component',
+        name: 'ComponentList',
+        component: () => import('@/views/base/component/index.vue'),
+        meta: { title: '组合组件', icon: 'Share' }
+      },
+      {
         path: 'env',
         name: 'EnvConfig',
         component: () => import('@/views/env/index.vue'),

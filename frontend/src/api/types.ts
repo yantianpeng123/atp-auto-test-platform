@@ -280,6 +280,12 @@ export interface CaseStepInfo {
   id: number
   caseId: number
   apiId: number
+  /** 步骤阶段：pre-前置 / main-主步骤 / post-后置 */
+  phase?: string
+  /** 步骤类型：1-单接口 2-组合组件 3-其他类型 */
+  stepType?: number
+  /** 组合组件ID（stepType=2 时引用） */
+  componentId?: number
   apiName: string | null
   apiMethod: string | null
   apiPath: string | null
@@ -288,16 +294,115 @@ export interface CaseStepInfo {
   requestOverride: string | null
   assertions: string | null
   responseVar: string | null
+  isDisabled?: number
+  promoteGlobal?: number
+  continueOnFail?: number
+  description?: string | null
 }
 
 /** 步骤入参（嵌套在用例创建/编辑中） */
 export interface StepParams {
-  apiId: number
+  apiId?: number
+  /** 步骤阶段 */
+  phase?: string
+  /** 步骤类型 */
+  stepType?: number
+  /** 组合组件ID */
+  componentId?: number
   sortOrder?: number
   stepName?: string
   requestOverride?: string
   assertions?: string
   responseVar?: string
+  isDisabled?: number
+  promoteGlobal?: number
+  continueOnFail?: number
+  description?: string
+}
+
+/** 组合组件出参（含子步骤） */
+export interface ApiComponentInfo {
+  id: number
+  projectId: number
+  moduleId: number | null
+  name: string
+  description: string | null
+  createBy?: number | null
+  createTime?: string
+  updateTime?: string
+  /** 子步骤（详情返回；列表为 null） */
+  steps?: ComponentStepInfo[] | null
+}
+
+/** 组合组件步骤出参（复用 CaseStepVO 结构，详情接口返回） */
+export interface ComponentStepInfo {
+  id: number
+  stepType?: number
+  apiId?: number | null
+  /** 嵌套组件ID（stepType=2 时引用；后端经 CaseStepVO.componentId 透传） */
+  componentId?: number | null
+  sortOrder: number
+  stepName: string | null
+  requestOverride: string | null
+  assertions: string | null
+  responseVar: string | null
+  isDisabled?: number
+  continueOnFail?: number
+  description?: string | null
+  apiName?: string | null
+  apiMethod?: string | null
+  apiPath?: string | null
+}
+
+/** 组合组件查询入参 */
+export interface ApiComponentQuery {
+  projectId?: number
+  moduleId?: number
+  name?: string
+  page?: number
+  size?: number
+}
+
+/** 组合组件新增/编辑入参 */
+export interface ApiComponentSaveParams {
+  id?: number
+  projectId: number
+  moduleId?: number | null
+  name: string
+  description?: string
+  steps?: ComponentStepSaveParams[]
+}
+
+/** 组合组件步骤入参 */
+export interface ComponentStepSaveParams {
+  id?: number
+  stepType?: number
+  apiId?: number | null
+  childComponentId?: number | null
+  sortOrder?: number
+  stepName?: string
+  requestOverride?: string
+  assertions?: string
+  responseVar?: string
+  isDisabled?: number
+  continueOnFail?: number
+  description?: string
+}
+
+/** 用例步骤扩展（前置/后置），用于扩展表格展示 */
+export interface CaseExtensionStep {
+  _uid: number
+  phase: string
+  stepType: number
+  componentId?: number | null
+  /** 组合组件名称（UI 展示） */
+  componentName?: string
+  stepName?: string
+  responseVar?: string
+  isDisabled: number
+  promoteGlobal: number
+  continueOnFail: number
+  description?: string
 }
 
 /** 断言规则项 */

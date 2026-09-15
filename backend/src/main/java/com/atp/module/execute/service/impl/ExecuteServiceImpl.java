@@ -35,6 +35,7 @@ import com.atp.module.testcase.mapper.DatasetItemMapper;
 import com.atp.module.testcase.mapper.DatasetTemplateMapper;
 import com.atp.module.testcase.mapper.TestCaseMapper;
 import com.atp.module.testcase.vo.CaseStepVO;
+import com.atp.module.base.mapper.ApiComponentStepMapper;
 import com.atp.module.execute.entity.Execution;
 import com.atp.module.execute.entity.ExecutionAssertion;
 import com.atp.module.execute.entity.ExecutionDetail;
@@ -82,6 +83,7 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final ExecutionAssertionMapper executionAssertionMapper;
     private final TestPlanMapper testPlanMapper;
     private final UserMapper userMapper;
+    private final ApiComponentStepMapper componentStepMapper;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
@@ -118,8 +120,13 @@ public class ExecuteServiceImpl implements ExecuteService {
             List<StepExecuteVO> stepResults = new ArrayList<>();
             int passed = 0;
             int failed = 0;
-            for (CaseStepVO stepVO : stepVOs) {
-                StepExecuteVO stepResult = executeStep(stepVO, env, resolver, variables);
+            // 展开步骤（前置→主→后置，组件递归展开，跳过禁用步骤）
+            List<ResolvedStep> resolved = expandSteps(stepVOs);
+            for (ResolvedStep rs : resolved) {
+                StepExecuteVO stepResult = executeStep(rs.step(), env, resolver, variables);
+                stepResult.setComponentId(rs.ownerComponentId());
+                stepResult.setParentStepId(rs.parentStepId());
+                stepResult.setNestLevel(rs.nestLevel());
                 stepResults.add(stepResult);
                 if ("PASSED".equals(stepResult.getStatus())) {
                     passed++;
@@ -279,6 +286,44 @@ public class ExecuteServiceImpl implements ExecuteService {
         } catch (Exception e) {
             return builder.errorMsg(e.getMessage()).durationMs(System.currentTimeMillis() - start).build();
         }
+    }
+
+    // ==================== 步骤展开（前置/后置 + 组合组件） ====================
+
+    /** 组合组件最大嵌套深度，防止无限递归 */
+    private static final int MAX_COMPONENT_DEPTH = 10;
+
+    /** 展开后的可执行步骤：携带嵌套层级、父步骤、所属组件 */
+    private record ResolvedStep(CaseStepVO step, int nestLevel, Long parentStepId, Long ownerComponentId) {
+    }
+
+    /** 将用例步骤列表展开为「实际执行步骤」序列：前置→主→后置顺序已在 SQL 中保证，这里负责组件递归展开与禁用跳过 */
+    private List<ResolvedStep> expandSteps(List<CaseStepVO> stepVOs) {
+        List<ResolvedStep> out = new ArrayList<>();
+        for (CaseStepVO s : stepVOs) {
+            expandOne(s, 0, null, null, out);
+        }
+        return out;
+    }
+
+    private void expandOne(CaseStepVO step, int depth, Long parentStepId, Long ownerComponentId, List<ResolvedStep> out) {
+        // 跳过禁用步骤
+        if (step.getIsDisabled() != null && step.getIsDisabled() == 1) {
+            return;
+        }
+        if (depth > MAX_COMPONENT_DEPTH) {
+            throw new BizException(ResultCode.BAD_REQUEST, "组合组件嵌套层级过深");
+        }
+        Integer stepType = step.getStepType() != null ? step.getStepType() : 1;
+        if (stepType == 2 && step.getComponentId() != null) {
+            // 组合组件：递归展开其子步骤，父步骤为本容器步骤，所属组件为本组件
+            List<CaseStepVO> children = componentStepMapper.selectComponentSteps(step.getComponentId());
+            for (CaseStepVO child : children) {
+                expandOne(child, depth + 1, step.getId(), step.getComponentId(), out);
+            }
+            return;
+        }
+        out.add(new ResolvedStep(step, depth, parentStepId, ownerComponentId));
     }
 
     // ==================== 断言 / 提取 ====================
@@ -456,6 +501,9 @@ public class ExecuteServiceImpl implements ExecuteService {
                 d.setRoundIndex(round.getRoundIndex());
                 d.setStepIndex(si);
                 d.setStepId(s.getStepId());
+                d.setComponentId(s.getComponentId());
+                d.setParentStepId(s.getParentStepId());
+                d.setNestLevel(s.getNestLevel() != null ? s.getNestLevel() : 0);
                 d.setStepName(s.getStepName());
                 d.setMethod(s.getMethod());
                 d.setUrl(s.getUrl());

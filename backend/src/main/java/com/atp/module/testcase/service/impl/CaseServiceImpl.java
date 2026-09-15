@@ -262,9 +262,14 @@ public class CaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> imple
             CaseStep step = new CaseStep();
             step.setCaseId(testCase.getId());
             step.setApiId(apiId);
+            step.setPhase("main");
+            step.setStepType(1);
             step.setSortOrder(i + 1);
             step.setRequestOverride(null);
             step.setAssertions(buildDefaultStatusAssertion(entry.getResponseStatus()));
+            step.setIsDisabled(0);
+            step.setPromoteGlobal(0);
+            step.setContinueOnFail(0);
             caseStepMapper.insert(step);
         }
 
@@ -351,14 +356,31 @@ public class CaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> imple
         }
         for (int i = 0; i < steps.size(); i++) {
             StepDTO dto = steps.get(i);
+            Integer stepType = dto.getStepType() != null ? dto.getStepType() : 1;
+            if (stepType == 2) {
+                if (dto.getComponentId() == null) {
+                    throw new BizException(ResultCode.BAD_REQUEST, "组合组件步骤必须选择引用的组件");
+                }
+            } else {
+                if (dto.getApiId() == null) {
+                    throw new BizException(ResultCode.BAD_REQUEST, "请选择步骤关联接口");
+                }
+            }
             CaseStep step = new CaseStep();
             step.setCaseId(caseId);
             step.setApiId(dto.getApiId());
+            step.setPhase(dto.getPhase() != null ? dto.getPhase() : "main");
+            step.setStepType(stepType);
+            step.setComponentId(dto.getComponentId());
             step.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : i + 1);
             step.setStepName(trimToNull(dto.getStepName()));
             step.setRequestOverride(normalizeJson(dto.getRequestOverride(), "步骤请求覆盖内容"));
             step.setAssertions(normalizeJson(dto.getAssertions(), "步骤断言规则"));
             step.setResponseVar(trimToNull(dto.getResponseVar()));
+            step.setIsDisabled(dto.getIsDisabled() != null ? dto.getIsDisabled() : 0);
+            step.setPromoteGlobal(dto.getPromoteGlobal() != null ? dto.getPromoteGlobal() : 0);
+            step.setContinueOnFail(dto.getContinueOnFail() != null ? dto.getContinueOnFail() : 0);
+            step.setDescription(trimToNull(dto.getDescription()));
             caseStepMapper.insert(step);
         }
     }
