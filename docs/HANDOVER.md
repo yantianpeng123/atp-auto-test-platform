@@ -1,6 +1,6 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-14
+> 更新时间：2026-09-16
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
 
@@ -63,7 +63,7 @@
 | 第一阶段 | 架构 + JWT 鉴权 + 登录注册 + 项目管理 | ✅ 完成 |
 | 第二阶段 | 基础数据（工程/版本/模块）+ 接口定义 | ✅ 完成 |
 | 第三阶段 | **用例管理 + 步骤编排 + 执行引擎 + 数据源 + 测试计划** | ✅ 完成 |
-| 第四阶段 | 定时任务批次、**报告中心（前端）**、图表看板、通知 | 🔶 批次/报告前端完成（mock），后端报告接口待补 |
+| 第四阶段 | 定时任务批次、**报告中心（前后端）**、图表看板、通知 | ✅ 批次/报告前后端完成；图表看板/通知未开始 |
 | 第五阶段 | CI 集成、项目级 RBAC、并发执行 | ⬜ 未开始 |
 
 ### 4.1 已完成模块
@@ -78,18 +78,18 @@
 | 数据源管理 | ✅ | ✅ | 数据源模板 CRUD、字段(key) 定义、**数据项多行编辑** |
 | 执行引擎 | ✅ | ✅（调试入口） | HTTP 执行、变量解析、断言引擎、多轮数据驱动 |
 | 测试计划 | ✅ | ✅ | 计划 CRUD、关联用例、Cron 调度、启停、手动执行；项目隔离 + 同名校验 |
+| 组合组件 | ✅ | ✅ | `tb_api_component`/`_step` 两张表；组件 CRUD（`/api/component/**`）；步骤支持单接口(step_type=1)/嵌套组件(2)；执行引擎 `expandSteps/expandOne` 递归展开、防环(深度10)、`component_id/parent_step_id/nest_level` 落 `tb_execution_detail`；独立菜单「组合组件」；前端编辑页已支持调试运行（含结果抽屉） |
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
-| 执行报告/报告中心 | ⬜（接口 TODO） | ✅（mock） | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，前端 mock 渲染，后端接口待补 |
+| 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
 
 ### 4.2 尚未实现
 
-- **报告中心后端接口**：前端报告页/列表已用 mock 渲染，后端缺 `GET /api/execute/{executionId}`（报告详情）与 `GET /api/execute/list`（报告列表），替换点已在 `api/execute.ts` 标注 TODO。
 - **执行报告"重跑"精度**：报告页"失败重试"当前降级为整用例重跑（调 `executeCase`），精确单步重跑需执行引擎后续支持。
 - **批次执行异步化**：`executeBatch` 当前为同步执行（HTTP 返回即跑完），长批次可能超时，建议改"立即返回 runId + 后台异步"。
 - **图表看板、通知、CI 集成、项目级 RBAC、并发执行** 均未开始。
 
-前端菜单现状：「测试计划」「定时任务」「报告中心」均已启用（非 disabled）。
+前端菜单现状：「组合组件」「测试计划」「定时任务」「报告中心」均已启用（非 disabled）。
 
 ---
 
@@ -158,7 +158,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 六、数据库设计
 
-### 已建表（20 张）
+### 已建表（22 张）
 
 | 表 | 用途 | 状态 |
 | --- | --- | --- |
@@ -168,6 +168,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | `tb_api_definition` | 接口定义 | ✅ 使用中 |
 | `tb_test_case` | 用例 | ✅ 使用中 |
 | `tb_case_step` | 用例步骤（含 `response_var`、`request_override`、`assertions`） | ✅ 使用中 |
+| `tb_api_component` / `tb_api_component_step` | 组合组件 / 组件步骤（`step_type` 1单接口/2嵌套组件，防环；复用 `CaseStepVO` 结构展开） | ✅ 使用中 |
 | `tb_dataset_template` / `tb_dataset_item` | 数据源模板 / 数据项 | ✅ 使用中 |
 | `tb_test_env` | 环境配置 | ✅ 使用中 |
 | `tb_test_plan` / `tb_plan_case` | 测试计划 / 计划关联用例 | ✅ 使用中 |
@@ -233,6 +234,15 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | POST | `/api/dataset/template` | 新增模板 |
 | PUT | `/api/dataset/template` | 修改模板（数据项整体替换） |
 | DELETE | `/api/dataset/template/{id}` | 删除模板（级联删除数据项） |
+
+### 组合组件
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/component/list` | 组合组件分页（按项目） |
+| GET | `/api/component/{id}` | 组件详情（含步骤树） |
+| POST | `/api/component` | 新增组件（含步骤） |
+| PUT | `/api/component` | 修改组件 |
+| DELETE | `/api/component/{id}` | 删除组件 |
 
 ### 环境
 | 方法 | 路径 | 说明 |
@@ -316,7 +326,8 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | 低 | `README.md` 进度描述停留在第一阶段，未同步 | `README.md` |
 
 ### 9.2 功能缺口
-- 报告中心**后端接口**待补（见 4.2）：详情 `GET /api/execute/{executionId}` + 列表 `GET /api/execute/list`。
+- ~~报告中心**后端接口**~~：已于 2026-09-14 补齐（详见 4.1「执行报告/报告中心」行），前端由 mock 切真实接口。
+- **数据生成器 + 表达式模板（设计完成，未编码）**：详见 `docs/data-generator-and-expression-design.md`。计划新增 `tb_data_generator` 表 + `step_type=3`（生成变量步骤）+ `GeneratorEngine` 表达式解析器（白名单、禁 eval），及前端 `/base/generator` 独立页面；现有 `VariableResolver.resolve()` 仅匹配 `${var}`（不含 `()`），新增生成器解析遍处理 `${func(args)}` 后交回变量池。
 - 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
 - 报告页"失败重试"精度（当前整用例重跑降级）。
 - 图表看板、通知、CI 集成、项目级 RBAC、并发执行均未开始。
@@ -342,8 +353,10 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 十一、下一步建议（按优先级）
 
-1. **报告中心后端接口**：补 `GET /api/execute/{executionId}` + `GET /api/execute/list`（组装逻辑可复用 `ExecuteServiceImpl.getLatestExecution` 现有 detail/assertion→VO 代码），替换前端 `api/execute.ts` 两处 TODO，报告页即由 mock 切真数据。
+1. **数据生成器 + 表达式模板（设计已完成）**：按 `docs/data-generator-and-expression-design.md` 落地；优先级最高的「阶段 1」`GeneratorEngine` + `/preview` 接口可在**零前端改动**下让 `${randomInt(8)}` / `${phone()}` 等直接在参数中生效。
 2. **批次执行异步化**：`executeBatch` 改为"立即返回 runId + 后台线程执行"，避免长批次 HTTP 超时。
 3. **修复数据源弹窗缺陷**（第九节 9.1 高优先级两项）。
 4. **用例列表页补「执行」入口**，并支持选择环境。
 5. **图表看板 / 通知 / CI 集成 / 项目级 RBAC / 并发执行**（长期规划）。
+
+> 报告中心后端接口已于 2026-09-14 补齐，原下一步第 1 项已完成并移除。
