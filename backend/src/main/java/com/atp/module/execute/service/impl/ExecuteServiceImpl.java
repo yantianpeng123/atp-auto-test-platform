@@ -6,7 +6,9 @@ import cn.hutool.json.JSONUtil;
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
 import com.atp.common.result.PageResult;
+import com.atp.module.base.entity.ApiComponent;
 import com.atp.module.base.entity.ApiDefinition;
+import com.atp.module.base.mapper.ApiComponentMapper;
 import com.atp.module.base.mapper.ApiDefinitionMapper;
 import com.atp.module.env.entity.TestEnv;
 import com.atp.module.env.mapper.TestEnvMapper;
@@ -84,22 +86,33 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final TestPlanMapper testPlanMapper;
     private final UserMapper userMapper;
     private final ApiComponentStepMapper componentStepMapper;
+    private final ApiComponentMapper apiComponentMapper;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
         TestCase testCase = testCaseMapper.selectById(caseId);
+        // 用例不存在时回退为「组合组件调试」：组件步骤按主步骤直接展开执行；不读数据集、执行结果不落库
+        ApiComponent component = null;
         if (testCase == null) {
-            throw new BizException(ResultCode.CASE_NOT_FOUND);
+            component = apiComponentMapper.selectById(caseId);
+            if (component == null) {
+                throw new BizException(ResultCode.CASE_NOT_FOUND);
+            }
         }
+        boolean componentDebug = component != null;
+        String caseName = componentDebug ? component.getName() : testCase.getName();
+
         TestEnv env = testEnvMapper.selectById(request.getEnvId());
         if (env == null) {
             throw new BizException(ResultCode.ENV_NOT_FOUND);
         }
 
-        List<CaseStepVO> stepVOs = caseStepMapper.selectStepsByCaseId(caseId);
+        List<CaseStepVO> stepVOs = componentDebug
+                ? componentStepMapper.selectComponentSteps(caseId)
+                : caseStepMapper.selectStepsByCaseId(caseId);
 
-        // 读取参数化数据（多行 → 多轮）
-        List<Map<String, Object>> rows = loadDatasetRows(caseId);
+        // 读取参数化数据（多行 → 多轮）；组件调试无数据集
+        List<Map<String, Object>> rows = componentDebug ? List.of() : loadDatasetRows(caseId);
         int totalRounds = Math.max(1, rows.size());
 
         long caseStart = System.currentTimeMillis();
@@ -157,7 +170,7 @@ public class ExecuteServiceImpl implements ExecuteService {
 
         CaseExecuteVO vo = CaseExecuteVO.builder()
                 .caseId(caseId)
-                .caseName(testCase.getName())
+                .caseName(caseName)
                 .envId(env.getId())
                 .totalRounds(totalRounds)
                 .passedRounds(passedRounds)
@@ -168,8 +181,8 @@ public class ExecuteServiceImpl implements ExecuteService {
                 .build();
 
         // ============ 持久化执行记录（头表 + 每轮每步明细 + 断言） ============
-        // 调试运行不落库，仅正式「执行」才记录
-        if (!Boolean.TRUE.equals(request.getDebug())) {
+        // 调试运行不落库，仅正式「执行」才记录；组合组件调试视为调试，永不落库
+        if (!componentDebug && !Boolean.TRUE.equals(request.getDebug())) {
             persistExecution(caseId, testCase, env, vo, duration, request.getPlanId());
         }
 

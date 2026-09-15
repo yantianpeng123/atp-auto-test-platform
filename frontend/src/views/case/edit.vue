@@ -124,7 +124,11 @@
                 <!-- 用例步骤子节点 -->
                 <div v-else class="tree-step" :class="{ 'tree-step-active': data.uid === currentMainUid }">
                   <span class="tree-step-order">{{ data.order }}</span>
-                  <template v-if="stepByUid(data.uid) && getStepApiInfo(stepByUid(data.uid)!)">
+                  <template v-if="stepByUid(data.uid)?.stepType === 2">
+                    <el-tag size="small" type="warning" class="method-tag">组件</el-tag>
+                    <span class="tree-step-path">{{ componentNameOf(stepByUid(data.uid)!) || '未选择组件' }}</span>
+                  </template>
+                  <template v-else-if="stepByUid(data.uid) && getStepApiInfo(stepByUid(data.uid)!)">
                     <el-tag size="small" :type="methodTagType(getStepApiInfo(stepByUid(data.uid)!)!.method)" class="method-tag">
                       {{ getStepApiInfo(stepByUid(data.uid)!)!.method }}
                     </el-tag>
@@ -190,19 +194,38 @@
             <el-card v-if="activeStep" shadow="never" class="section-card detail-section">
               <template #header>
                 <div class="detail-card-header">
-                  <span class="section-title">当前接口:</span>
-                  <el-tag size="small" :type="methodTagType(getStepApiInfo(activeStep)!.method)" class="method-tag">
-                    {{ getStepApiInfo(activeStep)!.method }}
-                  </el-tag>
-                  <span v-if="getStepApiInfo(activeStep)" class="detail-api-path">{{ getStepApiInfo(activeStep)!.path }}</span>
-                  <el-button type="primary" link size="small" @click="openApiDialogForStep(currentMainUid!)">更换接口</el-button>
-                  <el-button type="primary" link size="small" @click="toggleAssertions">断言</el-button>
-                  <el-button type="primary" link size="small" @click="openDatasetDialog">数据源选择</el-button>
+                  <template v-if="activeStep.stepType === 2">
+                    <span class="section-title">当前组件:</span>
+                    <el-tag size="small" type="warning" class="method-tag">组件</el-tag>
+                    <span class="detail-api-path">{{ componentNameOf(activeStep) || '未选择组件' }}</span>
+                    <el-button type="primary" link size="small" @click="openApiDialogForStep(currentMainUid!)">更换组件</el-button>
+                  </template>
+                  <template v-else>
+                    <span class="section-title">当前接口:</span>
+                    <template v-if="getStepApiInfo(activeStep)">
+                      <el-tag size="small" :type="methodTagType(getStepApiInfo(activeStep)!.method)" class="method-tag">
+                        {{ getStepApiInfo(activeStep)!.method }}
+                      </el-tag>
+                      <span class="detail-api-path">{{ getStepApiInfo(activeStep)!.path }}</span>
+                    </template>
+                    <el-button type="primary" link size="small" @click="openApiDialogForStep(currentMainUid!)">更换接口</el-button>
+                    <el-button type="primary" link size="small" @click="toggleAssertions">断言</el-button>
+                    <el-button type="primary" link size="small" @click="openDatasetDialog">数据源选择</el-button>
+                  </template>
                 </div>
               </template>
 
+              <!-- 组合组件步骤：请求/断言沿用组件自身配置，此处仅作说明 -->
+              <el-alert
+                v-if="activeStep.stepType === 2"
+                type="info"
+                :closable="false"
+                title="组合组件步骤的请求头 / 请求参数 / 断言沿用组件自身配置，变量与组件内部步骤共享同一变量池。"
+                class="component-step-tip"
+              />
+
               <!-- 响应变量名 -->
-              <div class="step-form-item">
+              <div v-if="activeStep.stepType !== 2" class="step-form-item">
                 <div class="field-label">响应变量名</div>
                 <el-input
                   v-model="activeStep.responseVar"
@@ -212,7 +235,7 @@
               </div>
 
               <!-- 请求覆盖（拆分为请求头 / 请求参数） -->
-              <div class="request-override-section">
+              <div v-if="activeStep.stepType !== 2" class="request-override-section">
                 <el-tabs v-model="requestTab" class="request-tabs">
                   <el-tab-pane label="请求头" name="headers">
                     <el-input
@@ -238,7 +261,7 @@
               </div>
 
               <!-- 断言规则 -->
-              <div v-if="showAssertions" class="step-form-item">
+              <div v-if="showAssertions && activeStep.stepType !== 2" class="step-form-item">
                 <div class="field-label">断言规则</div>
                 <div class="assertion-list">
                   <div v-for="(a, idx) in activeStep.assertions" :key="idx" class="assertion-row">
@@ -296,17 +319,24 @@
       </el-form>
     </div>
 
-    <!-- 接口选择弹框（新增/更换用例步骤） -->
+    <!-- 步骤选择弹框（新增/更换用例步骤：单接口 / 组合组件） -->
     <el-dialog
       v-model="apiDialogVisible"
-      title="选择接口"
+      :title="apiDialogStepType === 2 ? '选择组合组件' : '选择接口'"
       width="520px"
       :close-on-click-modal="false"
       append-to-body
     >
       <div class="api-dialog-body">
         <el-form label-width="80px">
-          <el-form-item label="选择接口">
+          <el-form-item label="步骤类型">
+            <el-radio-group v-model="apiDialogStepType" @change="onApiDialogTypeChange">
+              <el-radio :value="1">单接口</el-radio>
+              <el-radio :value="2">组合组件</el-radio>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item v-if="apiDialogStepType === 1" label="选择接口">
             <el-select
               v-model="apiDialogSelectedId"
               placeholder="请选择接口（支持搜索）"
@@ -330,7 +360,26 @@
               </el-option>
             </el-select>
           </el-form-item>
-          <div v-if="apiDialogPreview" class="api-dialog-preview">
+
+          <el-form-item v-else label="选择组件">
+            <el-select
+              v-model="apiDialogSelectedComponentId"
+              placeholder="请选择组合组件（支持搜索）"
+              filterable
+              class="api-dialog-select"
+              value-key="id"
+            >
+              <el-option v-for="c in componentOptions" :key="c.id" :label="c.name" :value="c.id">
+                <div class="api-select-option">
+                  <el-tag size="small" type="warning" class="method-tag">组件</el-tag>
+                  <span class="api-path">{{ c.name }}</span>
+                  <span v-if="c.description" class="api-option-name">{{ c.description }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <div v-if="apiDialogStepType === 1 && apiDialogPreview" class="api-dialog-preview">
             <div class="preview-row">
               <span class="preview-label">请求方法</span>
               <el-tag size="small" :type="methodTagType(apiDialogPreview.method)">{{ apiDialogPreview.method }}</el-tag>
@@ -348,11 +397,28 @@
               <span class="preview-value text-muted">{{ apiDialogPreview.description }}</span>
             </div>
           </div>
+
+          <div v-else-if="apiDialogStepType === 2 && apiDialogComponentPreview" class="api-dialog-preview">
+            <div class="preview-row">
+              <span class="preview-label">组件名称</span>
+              <span class="preview-value">{{ apiDialogComponentPreview.name }}</span>
+            </div>
+            <div v-if="apiDialogComponentPreview.description" class="preview-row">
+              <span class="preview-label">描述</span>
+              <span class="preview-value text-muted">{{ apiDialogComponentPreview.description }}</span>
+            </div>
+          </div>
         </el-form>
       </div>
       <template #footer>
         <el-button @click="apiDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!apiDialogSelectedId" @click="confirmApiSelect">确定</el-button>
+        <el-button
+          type="primary"
+          :disabled="apiDialogStepType === 1 ? !apiDialogSelectedId : !apiDialogSelectedComponentId"
+          @click="confirmApiSelect"
+        >
+          确定
+        </el-button>
       </template>
     </el-dialog>
 
@@ -722,29 +788,96 @@ function goBack() {
   router.push('/case')
 }
 
-/* ---- 接口选择弹框（用例步骤） ---- */
+/* ---- 步骤选择弹框（用例步骤：单接口 / 组合组件） ---- */
 const apiDialogVisible = ref(false)
 const apiDialogSelectedId = ref<number | null>(null)
+const apiDialogSelectedComponentId = ref<number | null>(null)
 const apiDialogTargetUid = ref<number | null>(null)
+/** 步骤类型：1-单接口 2-组合组件 */
+const apiDialogStepType = ref<1 | 2>(1)
 
 const apiDialogPreview = computed(() => {
   if (!apiDialogSelectedId.value) return null
   return apiOptions.value.find((a) => a.id === apiDialogSelectedId.value) || null
 })
 
+const apiDialogComponentPreview = computed(() => {
+  if (!apiDialogSelectedComponentId.value) return null
+  return componentOptions.value.find((c) => c.id === apiDialogSelectedComponentId.value) || null
+})
+
+/** 切换步骤类型时清空已选项 */
+function onApiDialogTypeChange() {
+  apiDialogSelectedId.value = null
+  apiDialogSelectedComponentId.value = null
+}
+
 function openApiDialog() {
   apiDialogTargetUid.value = null
+  apiDialogStepType.value = 1
   apiDialogSelectedId.value = null
+  apiDialogSelectedComponentId.value = null
   apiDialogVisible.value = true
 }
 
 function openApiDialogForStep(uid: number) {
+  const step = stepByUid(uid)
   apiDialogTargetUid.value = uid
-  apiDialogSelectedId.value = null
+  apiDialogStepType.value = step?.stepType === 2 ? 2 : 1
+  apiDialogSelectedId.value = apiDialogStepType.value === 1 ? (step?.apiId || null) : null
+  apiDialogSelectedComponentId.value = apiDialogStepType.value === 2 ? (step?.componentId ?? null) : null
   apiDialogVisible.value = true
 }
 
 function confirmApiSelect() {
+  // 组合组件步骤
+  if (apiDialogStepType.value === 2) {
+    const comp = componentOptions.value.find((c) => c.id === apiDialogSelectedComponentId.value)
+    if (!comp) return
+
+    if (apiDialogTargetUid.value !== null) {
+      const step = stepByUid(apiDialogTargetUid.value)
+      if (!step) return
+      const switchedFromApi = step.stepType !== 2
+      step.stepType = 2
+      step.componentId = comp.id
+      step.componentName = comp.name
+      step.apiId = 0
+      step.apiName = undefined
+      step.apiMethod = undefined
+      step.apiPath = undefined
+      step.requestHeaders = ''
+      step.requestParams = ''
+      step.assertions = []
+      step.responseVar = undefined
+      if (switchedFromApi || !step.stepName) step.stepName = comp.name
+    } else {
+      form.steps.push({
+        _uid: uidSeq++,
+        apiId: 0,
+        apiName: undefined,
+        apiMethod: undefined,
+        apiPath: undefined,
+        phase: 'main',
+        stepType: 2,
+        componentId: comp.id,
+        componentName: comp.name,
+        sortOrder: 0,
+        stepName: comp.name,
+        requestOverride: '',
+        requestHeaders: '',
+        requestParams: '',
+        assertions: [],
+        isDisabled: 0,
+        promoteGlobal: 0,
+        continueOnFail: 0,
+        description: ''
+      })
+    }
+    apiDialogVisible.value = false
+    return
+  }
+
   if (!apiDialogSelectedId.value) return
   const api = apiOptions.value.find((a) => a.id === apiDialogSelectedId.value)
   if (!api) return
@@ -752,11 +885,15 @@ function confirmApiSelect() {
   if (apiDialogTargetUid.value !== null) {
     const step = stepByUid(apiDialogTargetUid.value)
     if (!step) return
+    const switchedFromComponent = step.stepType === 2
+    step.stepType = 1
+    step.componentId = null
+    step.componentName = undefined
     step.apiId = api.id
     step.apiName = api.name
     step.apiMethod = api.method
     step.apiPath = api.path
-    if (!step.stepName) step.stepName = api.name
+    if (switchedFromComponent || !step.stepName) step.stepName = api.name
   } else {
     form.steps.push({
       _uid: uidSeq++,
@@ -1036,6 +1173,13 @@ async function loadComponentOptions() {
   }
 }
 
+/** 步骤展示用的组合组件名称（优先回显名，其次查组件映射） */
+function componentNameOf(step: StepFormItem): string {
+  if (step.componentName) return step.componentName
+  if (step.componentId) return componentMap.value[step.componentId] || ''
+  return ''
+}
+
 /** 获取步骤对应的接口信息 */
 function getStepApiInfo(step: StepFormItem): Pick<ApiInfo, 'id' | 'name' | 'method' | 'path'> | undefined {
   if (step.apiMethod || step.apiPath) {
@@ -1148,14 +1292,14 @@ async function handleSubmit() {
   // 步骤校验
   for (let i = 0; i < form.steps.length; i++) {
     const step = form.steps[i]
-    if (step.phase === 'main') {
-      if (!step.apiId) {
-        ElMessage.error(`第 ${i + 1} 步未选择接口`)
+    if (step.stepType === 2) {
+      if (!step.componentId) {
+        ElMessage.error(`第 ${i + 1} 步未选择组合组件`)
         return
       }
-    } else if (step.stepType === 2) {
-      if (!step.componentId) {
-        ElMessage.error(`第 ${i + 1} 步前置/后置扩展未选择公共接口组件`)
+    } else if (step.phase === 'main') {
+      if (!step.apiId) {
+        ElMessage.error(`第 ${i + 1} 步未选择接口`)
         return
       }
     }
@@ -1178,7 +1322,7 @@ async function handleSubmit() {
   // 按 前置→主→后置 顺序提交，统一 sortOrder
   rebuildGrouped()
   const stepsPayload: StepParams[] = form.steps.map((s, i) => ({
-    apiId: s.phase === 'main' ? s.apiId : undefined,
+    apiId: s.stepType === 1 ? s.apiId : undefined,
     phase: s.phase,
     stepType: s.stepType,
     componentId: s.stepType === 2 ? s.componentId ?? undefined : undefined,
@@ -1544,6 +1688,10 @@ onMounted(async () => {
 /* ---------- 右侧步骤详情 ---------- */
 .detail-section {
   min-height: 300px;
+}
+
+.component-step-tip {
+  margin-bottom: 14px;
 }
 
 .detail-empty {
