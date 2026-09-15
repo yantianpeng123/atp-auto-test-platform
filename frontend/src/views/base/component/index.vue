@@ -193,6 +193,15 @@
               <el-input v-model="row.description" size="small" placeholder="可选" />
             </template>
           </el-table-column>
+          <el-table-column label="请求覆盖" width="120" align="center">
+            <template #default="{ row }">
+              <template v-if="row.stepType === 1">
+                <el-tag v-if="hasOverride(row)" size="small" type="success" effect="plain">已配置</el-tag>
+                <el-button link type="primary" size="small" @click="openOverride(row)">编辑</el-button>
+              </template>
+              <span v-else class="comp-muted">—</span>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="100" align="center" fixed="right">
             <template #default="{ $index }">
               <el-button link type="primary" :icon="Top" size="small" :disabled="$index === 0" @click="moveStep($index, -1)" />
@@ -206,6 +215,53 @@
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 子步骤请求覆盖编辑 -->
+    <el-dialog
+      v-model="overrideVisible"
+      title="请求覆盖（requestOverride）"
+      width="560px"
+      append-to-body
+      :close-on-click-modal="false"
+      @closed="overrideTarget = null"
+    >
+      <div v-if="overrideTarget" class="override-form">
+        <p class="override-api-tip">
+          接口：<b>{{ overrideTarget.apiMethod }}</b> {{ overrideTarget.apiPath }}
+        </p>
+        <el-form label-width="78px">
+          <el-form-item label="Headers">
+            <el-input
+              v-model="overrideForm.headers"
+              type="textarea"
+              :rows="3"
+              placeholder='JSON，覆盖接口默认请求头；如 {"Authorization":"Bearer ${token}"}'
+              @blur="formatOverrideJson('headers')"
+            />
+          </el-form-item>
+          <el-form-item v-if="showOverrideBody" label="Body">
+            <el-input
+              v-model="overrideForm.body"
+              type="textarea"
+              :rows="6"
+              placeholder='JSON，请求体；支持 ${varName} 引用前序变量，如 {"userId":"${userId}","page":1}'
+              @blur="formatOverrideJson('body')"
+            />
+          </el-form-item>
+          <el-alert
+            v-else
+            type="info"
+            :closable="false"
+            class="override-body-hint"
+            title="当前接口方法（GET / HEAD / OPTIONS 等）无请求体，无需填写 Body。"
+          />
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="overrideVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!overrideValid" @click="saveOverride">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -303,6 +359,10 @@ interface StepEdit {
   apiMethod?: string
   apiPath?: string
   childComponentName?: string
+  /** 请求覆盖 - 请求头（JSON 文本） */
+  requestHeaders: string
+  /** 请求覆盖 - 请求体（JSON 文本） */
+  requestBody: string
 }
 
 const form = reactive({
@@ -382,6 +442,7 @@ async function openEdit(row: ApiComponentInfo) {
     const detail = await getComponentDetail(row.id)
     form.steps = (detail.steps || []).map((s) => {
       const isChild = s.stepType === 2
+      const parsed = parseRequestOverride(s.requestOverride)
       return {
         _id: stepSeq++,
         stepType: s.stepType || 1,
@@ -395,7 +456,9 @@ async function openEdit(row: ApiComponentInfo) {
         apiName: s.apiName || undefined,
         apiMethod: s.apiMethod || undefined,
         apiPath: s.apiPath || undefined,
-        childComponentName: isChild ? componentMap.value[s.componentId as number] : undefined
+        childComponentName: isChild ? componentMap.value[s.componentId as number] : undefined,
+        requestHeaders: parsed.headers || '',
+        requestBody: parsed.params || ''
       } as StepEdit
     })
   } catch {
@@ -415,7 +478,9 @@ function addApiStep() {
     responseVar: '',
     isDisabled: 0,
     continueOnFail: 0,
-    description: ''
+    description: '',
+    requestHeaders: '',
+    requestBody: ''
   })
 }
 
@@ -429,7 +494,9 @@ function addComponentStep() {
     responseVar: '',
     isDisabled: 0,
     continueOnFail: 0,
-    description: ''
+    description: '',
+    requestHeaders: '',
+    requestBody: ''
   })
 }
 
@@ -470,6 +537,99 @@ function removeStep(index: number) {
   form.steps.splice(index, 1)
 }
 
+/* ---- 请求覆盖编辑 ---- */
+const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
+
+const overrideVisible = ref(false)
+const overrideTarget = ref<StepEdit | null>(null)
+const overrideForm = reactive({ headers: '', body: '' })
+
+const showOverrideBody = computed(() =>
+  !!overrideTarget.value &&
+  overrideTarget.value.stepType === 1 &&
+  !!overrideTarget.value.apiMethod &&
+  BODY_METHODS.includes(overrideTarget.value.apiMethod)
+)
+
+const overrideValid = computed(() => {
+  if (!isValidJson(overrideForm.headers)) return false
+  if (showOverrideBody.value && !isValidJson(overrideForm.body)) return false
+  return true
+})
+
+function hasOverride(row: StepEdit): boolean {
+  return !!(row.requestHeaders?.trim() || row.requestBody?.trim())
+}
+
+function openOverride(row: StepEdit) {
+  overrideTarget.value = row
+  overrideForm.headers = row.requestHeaders || ''
+  overrideForm.body = row.requestBody || ''
+  overrideVisible.value = true
+}
+
+function saveOverride() {
+  const target = overrideTarget.value
+  if (!target) return
+  if (!isValidJson(overrideForm.headers)) {
+    ElMessage.error('Headers 不是合法 JSON')
+    return
+  }
+  if (showOverrideBody.value && !isValidJson(overrideForm.body)) {
+    ElMessage.error('Body 不是合法 JSON')
+    return
+  }
+  target.requestHeaders = overrideForm.headers.trim()
+  target.requestBody = overrideForm.body.trim()
+  overrideVisible.value = false
+}
+
+function formatOverrideJson(field: 'headers' | 'body') {
+  const val = overrideForm[field]
+  if (!val?.trim()) return
+  try {
+    overrideForm[field] = JSON.stringify(JSON.parse(val), null, 2)
+  } catch {
+    ElMessage.warning(field === 'headers' ? 'Headers 不是合法 JSON，未格式化' : 'Body 不是合法 JSON，未格式化')
+  }
+}
+
+function isValidJson(str: string): boolean {
+  if (!str?.trim()) return true
+  try {
+    JSON.parse(str)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 将 requestOverride JSON 拆分为 headers 和 body（与用例步骤详情一致） */
+function parseRequestOverride(override: string | undefined | null): { headers: string; params: string } {
+  if (!override?.trim()) return { headers: '', params: '' }
+  try {
+    const obj = JSON.parse(override)
+    const headers = obj.headers ? JSON.stringify(obj.headers, null, 2) : ''
+    const params = obj.body ? JSON.stringify(obj.body, null, 2) : (obj.params ? JSON.stringify(obj.params, null, 2) : '')
+    return { headers, params }
+  } catch {
+    return { headers: '', params: '' }
+  }
+}
+
+/** 将 headers 和 body 合并为 requestOverride JSON */
+function buildRequestOverride(headers: string, body: string): string {
+  const obj: Record<string, unknown> = {}
+  let hasContent = false
+  if (headers?.trim()) {
+    try { obj.headers = JSON.parse(headers); hasContent = true } catch { /* ignore */ }
+  }
+  if (body?.trim()) {
+    try { obj.body = JSON.parse(body); hasContent = true } catch { /* ignore */ }
+  }
+  return hasContent ? JSON.stringify(obj) : ''
+}
+
 /* ---- 保存 ---- */
 async function handleSave() {
   if (!formEl.value) return
@@ -508,6 +668,7 @@ async function handleSave() {
     sortOrder: i + 1,
     stepName: s.stepName.trim() || undefined,
     responseVar: s.responseVar.trim() || undefined,
+    requestOverride: buildRequestOverride(s.requestHeaders, s.requestBody) || undefined,
     isDisabled: s.isDisabled,
     continueOnFail: s.continueOnFail,
     description: s.description.trim() || undefined
@@ -637,5 +798,21 @@ onMounted(() => {
 
 .form-input {
   max-width: 360px;
+}
+
+/* 请求覆盖编辑弹框 */
+.override-api-tip {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.override-api-tip b {
+  color: #185fa5;
+  margin-right: 4px;
+}
+
+.override-body-hint {
+  margin-top: 4px;
 }
 </style>
