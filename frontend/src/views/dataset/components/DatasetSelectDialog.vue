@@ -35,7 +35,7 @@
           <span class="ds-name">{{ row.name }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="creatorName" label="添加人" width="120">
+      <el-table-column prop="creatorName" label="添加人" width="120" v-show="false">
         <template #default="{ row }">
           <span v-if="row.creatorName">{{ row.creatorName }}</span>
           <span v-else class="text-muted">—</span>

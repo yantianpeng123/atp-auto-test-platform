@@ -22,7 +22,7 @@
           <el-option v-for="c in caseOptions" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="添加人" prop="creatorName">
+      <el-form-item label="添加人"  prop="creatorName" v-show="false">
         <el-input v-model="form.creatorName" placeholder="请输入添加人" clearable maxlength="50" />
       </el-form-item>
       <el-form-item label="字段(key)" prop="keysText">
