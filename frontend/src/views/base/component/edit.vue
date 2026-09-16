@@ -48,7 +48,7 @@
             <template #header>
               <div class="steps-card-header">
                 <div class="steps-header-actions">
-                  <el-button type="primary" size="small" :icon="Plus" @click="openApiDialog">添加步骤</el-button>
+                  <el-button type="primary" size="small" :icon="Plus" @click="openApiDialog()">添加步骤</el-button>
                 </div>
                 <div class="debug-bar">
                   <el-select
@@ -714,7 +714,10 @@ const apiDialogPreview = computed(
     null
 )
 
-async function openApiDialog(uid?: number) {
+async function openApiDialog(uid?: number | Event) {
+  // @click 直接绑定函数引用时，Vue 会把 MouseEvent 当作首参传入；
+  // 必须归一化，否则会被误判为"更换接口"（replacingUid 非空）导致新增步骤静默失败。
+  const targetUid = typeof uid === 'number' ? uid : null
   if (!projectStore.currentProject?.id) {
     ElMessage.warning('当前未选择项目，无法加载接口列表')
     return
@@ -723,7 +726,7 @@ async function openApiDialog(uid?: number) {
     ElMessage.warning('请先在顶部选择归属模块')
     return
   }
-  replacingUid.value = uid ?? null
+  replacingUid.value = targetUid
   apiDialogSelectedId.value = null
   apiDialogVisible.value = true
   // 显式拉取接口列表，避免依赖 moduleId watch 的副作用导致下拉为空
