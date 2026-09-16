@@ -286,6 +286,14 @@ export interface CaseStepInfo {
   stepType?: number
   /** 组合组件ID（stepType=2 时引用） */
   componentId?: number
+  /** 生成变量步骤关联的数据生成器ID（stepType=3） */
+  generatorId?: number | null
+  /** 生成变量步骤关联生成器名称（展示用） */
+  generatorName?: string | null
+  /** 生成变量步骤的输出变量名（stepType=3） */
+  variableName?: string | null
+  /** 生成变量步骤：每次执行是否重新生成（stepType=3） */
+  regenEachRun?: number
   apiName: string | null
   apiMethod: string | null
   apiPath: string | null
@@ -318,6 +326,12 @@ export interface StepParams {
   promoteGlobal?: number
   continueOnFail?: number
   description?: string
+  /** 生成变量步骤（stepType=3）：关联的数据生成器 */
+  generatorId?: number
+  /** 生成变量步骤的输出变量名（供后续步骤 ${varName} 引用） */
+  variableName?: string
+  /** 生成变量步骤：每次执行是否重新生成（false 则整个执行固定同一值） */
+  regenEachRun?: boolean
 }
 
 /** 组合组件出参（含子步骤） */
@@ -403,6 +417,81 @@ export interface CaseExtensionStep {
   promoteGlobal: number
   continueOnFail: number
   description?: string
+  /** 生成变量步骤（stepType=3） */
+  generatorId?: number | null
+  /** 生成变量步骤关联的生成器名称（UI 展示） */
+  generatorName?: string
+  /** 生成变量步骤的输出变量名 */
+  variableName?: string
+  /** 生成变量步骤：每次执行是否重新生成 */
+  regenEachRun?: number
+}
+
+/* ============ 数据生成器（前端先行，后端待补） ============ */
+
+/** 生成器类型 */
+export type GeneratorType =
+  | 'RANDOM'
+  | 'PHONE'
+  | 'IDCARD'
+  | 'NAME'
+  | 'ENUM'
+  | 'TIMESTAMP'
+  | 'UUID'
+  | 'CUSTOM'
+
+/** 数据生成器出参 */
+export interface DataGeneratorInfo {
+  id: number
+  projectId: number
+  name: string
+  type: GeneratorType
+  /** 结构化参数（随 type）或 CUSTOM 的 template；前端以 Record 透传 */
+  params: Record<string, unknown> | null
+  description?: string | null
+  createTime?: string
+}
+
+/** 数据生成器查询入参 */
+export interface DataGeneratorQuery {
+  projectId?: number
+  name?: string
+  type?: GeneratorType
+  page?: number
+  size?: number
+}
+
+/** 数据生成器新增/编辑入参 */
+export interface DataGeneratorSaveParams {
+  id?: number
+  projectId: number
+  name: string
+  type: GeneratorType
+  params: Record<string, unknown>
+  description?: string
+}
+
+/** 生成器函数帮助信息（/functions 返回） */
+export interface GeneratorFunctionInfo {
+  name: string
+  args: string
+  desc: string
+  example: string
+}
+
+/** 试生成入参 */
+export interface GeneratorPreviewParams {
+  projectId: number
+  type: GeneratorType
+  params: Record<string, unknown>
+}
+
+/** 生成变量步骤种子（组件页从生成器页"选择"带回，写入 stepType=3） */
+export interface GeneratorStepSeed {
+  generatorId: number
+  generatorName: string
+  variableName: string
+  regenEachRun: boolean
 }
 
 /** 断言规则项 */

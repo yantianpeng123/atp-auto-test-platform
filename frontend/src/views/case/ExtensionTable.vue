@@ -9,12 +9,14 @@
       <el-table-column label="返回数据变量" min-width="120">
         <template #default="{ row }">
           <span v-if="row.responseVar" class="ext-var">{{ row.responseVar }}</span>
+          <span v-else-if="row.stepType === 3 && row.variableName" class="ext-var">{{ row.variableName }}</span>
           <span v-else class="ext-muted">—</span>
         </template>
       </el-table-column>
       <el-table-column label="类型" width="130">
         <template #default="{ row }">
           <el-tag v-if="row.stepType === 2" type="warning" size="small">公共接口组件</el-tag>
+          <el-tag v-else-if="row.stepType === 3" type="success" size="small">生成变量</el-tag>
           <el-tag v-else size="small">其他类型</el-tag>
         </template>
       </el-table-column>
@@ -61,6 +63,7 @@ import type { CaseExtensionStep } from '@/api/types'
 const props = defineProps<{
   steps: CaseExtensionStep[]
   componentMap?: Record<number, string>
+  generatorMap?: Record<number, string>
 }>()
 
 defineEmits<{
@@ -71,6 +74,9 @@ defineEmits<{
 
 function extName(row: CaseExtensionStep): string {
   if (row.stepName) return row.stepName
+  if (row.stepType === 3 && row.generatorId) {
+    return props.generatorMap?.[row.generatorId] || `生成器 #${row.generatorId}`
+  }
   if (row.componentId) {
     return props.componentMap?.[row.componentId] || `组件 #${row.componentId}`
   }

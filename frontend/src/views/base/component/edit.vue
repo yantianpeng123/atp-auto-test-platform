@@ -93,6 +93,10 @@
                   <span v-if="step.apiPath" class="tree-step-path">{{ step.apiPath }}</span>
                   <span v-else class="tree-step-missing">未选择接口</span>
                 </template>
+                <template v-else-if="step.stepType === 3">
+                  <el-tag size="small" type="info" class="method-tag">变量</el-tag>
+                  <span class="tree-step-path">{{ step.variableName || step.generatorName || '未配置变量名' }}</span>
+                </template>
                 <template v-else>
                   <el-tag size="small" type="warning" class="method-tag">组件</el-tag>
                   <span class="tree-step-path">{{ step.childComponentName || '未选择组件' }}</span>
@@ -138,6 +142,11 @@
                   <span v-if="activeStep.apiPath" class="detail-api-path">{{ activeStep.apiPath }}</span>
                   <el-button type="primary" link size="small" @click="openApiDialog(activeStep._id)">更换接口</el-button>
                 </template>
+                <template v-else-if="activeStep.stepType === 3">
+                  <span class="section-title">生成变量:</span>
+                  <el-tag size="small" type="info" class="method-tag">变量</el-tag>
+                  <span class="detail-api-path">{{ activeStep.generatorName || '未选择生成器' }}</span>
+                </template>
                 <template v-else>
                   <span class="section-title">嵌套组件:</span>
                   <span class="detail-api-path">{{ activeStep.childComponentName || '未选择组件' }}</span>
@@ -145,8 +154,8 @@
               </div>
             </template>
 
-            <!-- 返回变量名 -->
-            <div class="step-form-item">
+            <!-- 返回变量名（单接口步骤） -->
+            <div v-if="activeStep.stepType === 1" class="step-form-item">
               <div class="field-label">返回变量名</div>
               <el-input
                 v-model="activeStep.responseVar"
@@ -154,6 +163,23 @@
                 clearable
               />
             </div>
+
+            <!-- 生成变量步骤配置（stepType=3） -->
+            <template v-else-if="activeStep.stepType === 3">
+              <div class="step-form-item">
+                <div class="field-label">输出变量名</div>
+                <el-input
+                  v-model="activeStep.variableName"
+                  placeholder="如 phoneVar，后续步骤用 ${phoneVar} 引用"
+                  clearable
+                />
+              </div>
+              <div class="step-form-item">
+                <div class="field-label">每次执行重新生成</div>
+                <el-switch v-model="activeStep.regenEachRun" :active-value="1" :inactive-value="0" />
+                <span class="form-hint">关闭则整个执行过程固定同一值</span>
+              </div>
+            </template>
 
             <!-- 请求覆盖：请求头 / 请求参数 -->
             <template v-if="activeStep.stepType === 1">
@@ -183,10 +209,16 @@
               </div>
             </template>
             <el-alert
-              v-else
+              v-else-if="activeStep.stepType === 2"
               type="info"
               :closable="false"
               title="嵌套组件步骤的请求头 / 请求参数沿用组件自身配置，此处仅可设置返回变量名。"
+            />
+            <el-alert
+              v-else
+              type="info"
+              :closable="false"
+              title="生成变量步骤由数据生成器产出值并写入变量池，供后续步骤通过 ${变量名} 引用。"
             />
           </el-card>
 
@@ -212,17 +244,18 @@
           <div class="type-card-title">接口组件（推荐）</div>
           <div class="type-card-desc">由单个或多个接口按顺序组成；可配置请求头 / 请求参数 / 断言，复用性强。</div>
         </div>
-        <div class="type-card disabled" @click="onOtherTypeClick">
+        <div class="type-card" :class="{ active: typeChosen === 'gen' }" @click="typeChosen = 'gen'">
           <div class="type-card-title">
-            其他类型 · 生成随机数
-            <el-tag size="small" type="info" effect="plain">待实现</el-tag>
+            其他类型 · 生成变量（数据生成器）
+            <el-tag size="small" type="success" effect="plain">可用</el-tag>
           </div>
-          <div class="type-card-desc">后续将支持生成随机数等非接口类型的扩展步骤。</div>
+          <div class="type-card-desc">通过「数据生成器」生成随机手机号、身份证号、时间戳等，写入变量池供后续步骤引用。</div>
         </div>
       </div>
       <template #footer>
         <el-button @click="onBack">取消</el-button>
-        <el-button type="primary" :disabled="typeChosen !== 'api'" @click="confirmType">下一步</el-button>
+        <el-button v-if="typeChosen === 'api'" type="primary" @click="confirmType">下一步</el-button>
+        <el-button v-else-if="typeChosen === 'gen'" type="primary" @click="goGeneratorManage">进入生成器管理</el-button>
       </template>
     </el-dialog>
 
@@ -354,6 +387,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Bottom, Delete, Plus, Top } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getApiList, getModuleOptions } from '@/api/base'
@@ -374,21 +408,24 @@ import type {
   CaseExecuteResult,
   ComponentStepSaveParams,
   EnvInfo,
+  GeneratorStepSeed,
   OptionItem,
   StepExecuteResult
 } from '@/api/types'
 
-const props = defineProps<{ id?: number | null }>()
+const props = defineProps<{ id?: number | null; initialGeneratorStep?: GeneratorStepSeed | null }>()
 const emit = defineEmits<{ (e: 'back'): void; (e: 'saved'): void }>()
+
+const router = useRouter()
 
 const projectStore = useProjectStore()
 
 /* ============ 类型选择 ============ */
 const typeDialogVisible = ref(false)
-const typeChosen = ref<'' | 'api'>('')
+const typeChosen = ref<'' | 'api' | 'gen'>('')
 
-function onOtherTypeClick() {
-  ElMessage.info('其他类型（生成随机数）暂未实现')
+function goGeneratorManage() {
+  router.push({ path: '/base/generator', query: { mode: 'select' } })
 }
 
 function confirmType() {
@@ -415,6 +452,13 @@ interface StepEdit {
   apiMethod?: string
   apiPath?: string
   childComponentName?: string
+  /** 生成变量步骤（stepType=3）：关联生成器 */
+  generatorId?: number | null
+  generatorName?: string
+  /** 生成变量步骤的输出变量名（供后续步骤 ${varName} 引用） */
+  variableName?: string
+  /** 生成变量步骤：每次执行是否重新生成 */
+  regenEachRun?: number
   requestHeaders: string
   requestBody: string
   assertions: AssertionItem[]
@@ -674,6 +718,30 @@ function confirmApiSelect() {
   apiDialogVisible.value = false
 }
 
+/** 从生成器页"选择"带回：写入一条 stepType=3 生成变量步骤 */
+function addGeneratorStep(seed: GeneratorStepSeed) {
+  const step: StepEdit = {
+    _id: stepSeq++,
+    stepType: 3,
+    apiId: null,
+    childComponentId: null,
+    stepName: seed.generatorName,
+    responseVar: '',
+    isDisabled: 0,
+    continueOnFail: 0,
+    description: '',
+    generatorId: seed.generatorId,
+    generatorName: seed.generatorName,
+    variableName: seed.variableName,
+    regenEachRun: seed.regenEachRun ? 1 : 0,
+    requestHeaders: '',
+    requestBody: '',
+    assertions: []
+  }
+  form.steps.push(step)
+  activeUid.value = step._id
+}
+
 /* ============ 展示辅助 ============ */
 function methodTagType(method: string): 'success' | 'warning' | 'danger' | 'primary' | 'info' {
   switch ((method || '').toUpperCase()) {
@@ -790,6 +858,12 @@ async function handleSave() {
         return
       }
     }
+    if (s.stepType === 3) {
+      if (!s.generatorId) {
+        ElMessage.error(`第 ${i + 1} 个步骤未选择数据生成器`)
+        return
+      }
+    }
   }
 
   const projectId = projectStore.currentProject?.id
@@ -802,6 +876,9 @@ async function handleSave() {
     stepType: s.stepType,
     apiId: s.stepType === 2 ? null : s.apiId,
     childComponentId: s.stepType === 2 ? s.childComponentId : null,
+    generatorId: s.stepType === 3 ? s.generatorId ?? null : null,
+    variableName: s.stepType === 3 ? s.variableName?.trim() || undefined : undefined,
+    regenEachRun: s.stepType === 3 ? (s.regenEachRun === 1 ? 1 : 0) : undefined,
     sortOrder: i + 1,
     stepName: s.stepName.trim() || undefined,
     responseVar: s.responseVar.trim() || undefined,
@@ -843,6 +920,13 @@ function onBack() {
 }
 
 onMounted(() => {
+  if (props.initialGeneratorStep) {
+    // 从生成器管理页"选择"返回：直接进入编辑器并写入一条生成变量步骤
+    typeDialogVisible.value = false
+    openEditor(null)
+    addGeneratorStep(props.initialGeneratorStep)
+    return
+  }
   if (props.id != null) {
     openEditor(props.id)
   } else {
@@ -1105,6 +1189,12 @@ onMounted(() => {
   margin-bottom: 8px;
   font-size: 14px;
   color: #606266;
+}
+
+.form-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 
 .assertion-list {

@@ -72,6 +72,7 @@
     <ComponentEdit
       v-else
       :id="editingId"
+      :initial-generator-step="initialSeed"
       @back="closeEditor"
       @saved="closeEditor"
     />
@@ -84,7 +85,8 @@ import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getComponentList, deleteComponent } from '@/api/component'
 import { useProjectStore } from '@/stores/project'
-import type { ApiComponentInfo } from '@/api/types'
+import { useGeneratorSelectStore } from '@/stores/generatorSelect'
+import type { ApiComponentInfo, GeneratorStepSeed } from '@/api/types'
 import ComponentEdit from './edit.vue'
 
 const projectStore = useProjectStore()
@@ -133,20 +135,25 @@ function resetQuery() {
 /* ============ 编辑视图切换 ============ */
 const viewMode = ref<'list' | 'edit'>('list')
 const editingId = ref<number | null>(null)
+const generatorSelectStore = useGeneratorSelectStore()
+const initialSeed = ref<GeneratorStepSeed | null>(null)
 
 function openCreate() {
   editingId.value = null
+  initialSeed.value = null
   viewMode.value = 'edit'
 }
 
 function openEdit(row: ApiComponentInfo) {
   editingId.value = row.id
+  initialSeed.value = null
   viewMode.value = 'edit'
 }
 
 function closeEditor() {
   viewMode.value = 'list'
   editingId.value = null
+  initialSeed.value = null
   loadList()
 }
 
@@ -171,6 +178,14 @@ async function handleDelete(row: ApiComponentInfo) {
 }
 
 onMounted(() => {
+  if (generatorSelectStore.seed) {
+    // 从生成器管理页"选择"返回：直接进入编辑器并写入生成变量步骤
+    initialSeed.value = generatorSelectStore.seed
+    generatorSelectStore.clear()
+    editingId.value = null
+    viewMode.value = 'edit'
+    return
+  }
   loadList()
 })
 </script>

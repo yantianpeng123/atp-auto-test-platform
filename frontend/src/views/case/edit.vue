@@ -87,7 +87,7 @@
             <template #header>
               <div class="steps-card-header">
                 <div class="steps-header-actions">
-                  <el-button type="primary" size="small" :icon="Plus" @click="openApiDialog">添加步骤</el-button>
+                  <el-button  type="primary" size="small" :icon="Plus" @click="openApiDialog">添加步骤</el-button>
                 </div>
                 <div class="debug-bar">
                   <el-select v-model="debugEnvId" placeholder="选择环境" size="small" class="debug-env-select" clearable>
@@ -166,6 +166,7 @@
             <extension-table
               :steps="preSteps"
               :component-map="componentMap"
+              :generator-map="generatorMap"
               @add="openExtensionDialog('pre')"
               @edit="(s) => openExtensionDialog('pre', s)"
               @delete="removeStepByUid"
@@ -183,6 +184,7 @@
             <extension-table
               :steps="postSteps"
               :component-map="componentMap"
+              :generator-map="generatorMap"
               @add="openExtensionDialog('post')"
               @edit="(s) => openExtensionDialog('post', s)"
               @delete="removeStepByUid"
@@ -432,12 +434,31 @@
     >
       <el-form label-width="110px">
         <el-form-item label="扩展类型" required>
-          <el-select v-model="extForm.type" class="ext-dialog-select">
+          <el-select v-model="extForm.type" class="ext-dialog-select" @change="onExtTypeChange">
             <el-option :value="2" label="公共接口组件" />
-            <el-option :value="3" label="其他类型·生成随机数（后续实现）" disabled />
+            <el-option :value="3" label="生成变量（数据生成器）" />
           </el-select>
         </el-form-item>
-        <el-form-item label="选择组件" required>
+
+        <el-form-item v-if="extForm.type === 3" label="选择生成器" required>
+          <el-select
+            v-model="extForm.generatorId"
+            placeholder="请选择数据生成器"
+            filterable
+            class="ext-dialog-select"
+            @change="onExtGeneratorChange"
+          >
+            <el-option v-for="g in generatorOptions" :key="g.id" :label="g.name" :value="g.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="extForm.type === 3" label="输出变量名" required>
+          <el-input v-model="extForm.variableName" placeholder="如 phoneVar，后续步骤用 ${phoneVar} 引用" clearable />
+        </el-form-item>
+        <el-form-item v-if="extForm.type === 3" label="每次执行重新生成">
+          <el-switch v-model="extForm.regenEachRun" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+
+        <el-form-item v-if="extForm.type !== 3" label="选择组件" required>
           <el-select
             v-model="extForm.componentId"
             placeholder="请选择公共接口组件"
@@ -448,10 +469,10 @@
             <el-option v-for="c in componentOptions" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="扩展名称">
+        <el-form-item v-if="extForm.type !== 3" label="扩展名称">
           <el-input v-model="extForm.stepName" placeholder="默认取组件名称" clearable />
         </el-form-item>
-        <el-form-item label="返回数据变量">
+        <el-form-item v-if="extForm.type !== 3" label="返回数据变量">
           <el-input v-model="extForm.responseVar" placeholder="如 token，供后续步骤 ${token} 引用" clearable />
         </el-form-item>
         <el-form-item label="是否禁用">
@@ -469,7 +490,11 @@
       </el-form>
       <template #footer>
         <el-button @click="extDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!extForm.componentId" @click="confirmExtension">确定</el-button>
+        <el-button
+          type="primary"
+          :disabled="extForm.type === 3 ? !extForm.generatorId : !extForm.componentId"
+          @click="confirmExtension"
+        >确定</el-button>
       </template>
     </el-dialog>
 
@@ -560,6 +585,7 @@ import { createCase, getCaseDetail, updateCase } from '@/api/case'
 import { getApiList, getModuleOptions, getProjectOptions, getVersionOptions } from '@/api/base'
 import { getEnvList } from '@/api/env'
 import { getComponentList } from '@/api/component'
+import { getGeneratorList } from '@/api/generator'
 import { executeCase } from '@/api/execute'
 import DatasetSelectDialog from '@/views/dataset/components/DatasetSelectDialog.vue'
 import ExtensionTable from '@/views/case/ExtensionTable.vue'
@@ -569,6 +595,7 @@ import type {
   AssertionItem,
   CaseExecuteResult,
   CaseExtensionStep,
+  DataGeneratorInfo,
   EnvInfo,
   OptionItem,
   StepExecuteResult,
@@ -610,6 +637,14 @@ interface StepFormItem {
   componentId?: number | null
   /** 组合组件名称（UI 展示，不落库） */
   componentName?: string
+  /** 生成变量步骤（stepType=3）关联的数据生成器 */
+  generatorId?: number | null
+  /** 生成变量步骤关联生成器名称（UI 展示） */
+  generatorName?: string
+  /** 生成变量步骤输出变量名 */
+  variableName?: string
+  /** 生成变量步骤：每次执行是否重新生成 */
+  regenEachRun?: number
   /** 全局组件映射（id → 名称），用于扩展表格展示 */
   sortOrder?: number
   stepName?: string
@@ -925,11 +960,17 @@ const extDialogPhase = ref<'pre' | 'post'>('pre')
 const extDialogTitle = computed(() => (extDialogPhase.value === 'pre' ? '新增前置扩展' : '新增后置扩展'))
 const componentOptions = ref<ApiComponentInfo[]>([])
 const componentMap = ref<Record<number, string>>({})
+const generatorOptions = ref<DataGeneratorInfo[]>([])
+const generatorMap = ref<Record<number, string>>({})
 const editingExtUid = ref<number | null>(null)
 
 const extForm = reactive({
   type: 2,
   componentId: null as number | null,
+  generatorId: null as number | null,
+  generatorName: '',
+  variableName: '',
+  regenEachRun: 1,
   stepName: '',
   responseVar: '',
   isDisabled: 0,
@@ -944,6 +985,10 @@ function openExtensionDialog(phase: 'pre' | 'post', step?: CaseExtensionStep) {
   if (step) {
     extForm.type = step.stepType || 2
     extForm.componentId = step.componentId ?? null
+    extForm.generatorId = step.generatorId ?? null
+    extForm.generatorName = step.generatorName || ''
+    extForm.variableName = step.variableName || ''
+    extForm.regenEachRun = step.regenEachRun ?? 1
     extForm.stepName = step.stepName || ''
     extForm.responseVar = step.responseVar || ''
     extForm.isDisabled = step.isDisabled
@@ -953,6 +998,10 @@ function openExtensionDialog(phase: 'pre' | 'post', step?: CaseExtensionStep) {
   } else {
     extForm.type = 2
     extForm.componentId = null
+    extForm.generatorId = null
+    extForm.generatorName = ''
+    extForm.variableName = ''
+    extForm.regenEachRun = 1
     extForm.stepName = ''
     extForm.responseVar = ''
     extForm.isDisabled = 0
@@ -963,22 +1012,62 @@ function openExtensionDialog(phase: 'pre' | 'post', step?: CaseExtensionStep) {
   extDialogVisible.value = true
 }
 
+function onExtTypeChange() {
+  // 切换扩展类型时清空另一分支的已选值，避免脏数据落库
+  extForm.componentId = null
+  extForm.generatorId = null
+  extForm.generatorName = ''
+  extForm.variableName = ''
+  extForm.stepName = ''
+}
+
 function onExtComponentChange(id: number) {
   const c = componentOptions.value.find((x) => x.id === id)
   extForm.stepName = c ? c.name : ''
 }
 
+function onExtGeneratorChange(id: number) {
+  const g = generatorOptions.value.find((x) => x.id === id)
+  if (g) {
+    extForm.generatorName = g.name
+    extForm.stepName = g.name
+    if (!extForm.variableName) extForm.variableName = g.name
+  }
+}
+
 function confirmExtension() {
-  if (!extForm.componentId) return
-  const c = componentOptions.value.find((x) => x.id === extForm.componentId!)
   const phase = extDialogPhase.value
+  let name = ''
+  let generatorName = ''
+  let variableName: string | undefined
+  let componentId: number | null = null
+  let componentName: string | undefined
+
+  if (extForm.type === 3) {
+    if (!extForm.generatorId) return
+    const g = generatorOptions.value.find((x) => x.id === extForm.generatorId!)
+    generatorName = g?.name || ''
+    name = extForm.stepName || generatorName
+    variableName = extForm.variableName.trim() || undefined
+  } else {
+    if (!extForm.componentId) return
+    const c = componentOptions.value.find((x) => x.id === extForm.componentId!)
+    componentId = extForm.componentId
+    componentName = c?.name
+    name = extForm.stepName || c?.name || ''
+  }
+
   if (editingExtUid.value != null) {
     const step = stepByUid(editingExtUid.value)
     if (step) {
       step.stepType = extForm.type
-      step.componentId = extForm.componentId
-      step.componentName = c?.name
-      step.stepName = extForm.stepName || c?.name || ''
+      step.componentId = componentId
+      step.componentName = componentName
+      step.generatorId = extForm.type === 3 ? extForm.generatorId : null
+      step.generatorName = generatorName
+      step.variableName = variableName
+      step.regenEachRun = extForm.regenEachRun
+      step.stepName = name
       step.responseVar = extForm.responseVar.trim() || undefined
       step.isDisabled = extForm.isDisabled
       step.promoteGlobal = extForm.promoteGlobal
@@ -994,10 +1083,14 @@ function confirmExtension() {
       apiPath: undefined,
       phase,
       stepType: extForm.type,
-      componentId: extForm.componentId,
-      componentName: c?.name,
+      componentId,
+      componentName,
+      generatorId: extForm.type === 3 ? extForm.generatorId : null,
+      generatorName,
+      variableName,
+      regenEachRun: extForm.regenEachRun,
       sortOrder: 0,
-      stepName: extForm.stepName || c?.name || '',
+      stepName: name,
       requestOverride: '',
       requestHeaders: '',
       requestParams: '',
@@ -1173,6 +1266,25 @@ async function loadComponentOptions() {
   }
 }
 
+async function loadGeneratorOptions() {
+  const projectId = projectStore.currentProject?.id
+  if (!projectId) {
+    generatorOptions.value = []
+    return
+  }
+  try {
+    const result = await getGeneratorList({ projectId, page: 1, size: 500 })
+    generatorOptions.value = result.records
+    const map: Record<number, string> = {}
+    result.records.forEach((g) => {
+      map[g.id] = g.name
+    })
+    generatorMap.value = map
+  } catch {
+    generatorOptions.value = []
+  }
+}
+
 /** 步骤展示用的组合组件名称（优先回显名，其次查组件映射） */
 function componentNameOf(step: StepFormItem): string {
   if (step.componentName) return step.componentName
@@ -1326,6 +1438,9 @@ async function handleSubmit() {
     phase: s.phase,
     stepType: s.stepType,
     componentId: s.stepType === 2 ? s.componentId ?? undefined : undefined,
+    generatorId: s.stepType === 3 ? s.generatorId ?? undefined : undefined,
+    variableName: s.stepType === 3 ? s.variableName?.trim() || undefined : undefined,
+    regenEachRun: s.stepType === 3 ? s.regenEachRun === 1 : undefined,
     sortOrder: i + 1,
     stepName: s.stepName?.trim() || undefined,
     requestOverride: buildRequestOverride(s.requestHeaders, s.requestParams) || undefined,
@@ -1367,6 +1482,7 @@ onMounted(async () => {
   await loadAppOptions()
   await loadEnvOptions()
   await loadComponentOptions()
+  await loadGeneratorOptions()
 
   const caseId = route.query.id
   if (caseId) {
@@ -1392,6 +1508,10 @@ onMounted(async () => {
           stepType: s.stepType || 1,
           componentId: s.componentId ?? null,
           componentName: s.componentId ? componentMap.value[s.componentId] : undefined,
+          generatorId: s.generatorId ?? null,
+          generatorName: s.generatorId ? generatorMap.value[s.generatorId] : undefined,
+          variableName: s.variableName || undefined,
+          regenEachRun: s.regenEachRun ?? 0,
           sortOrder: s.sortOrder,
           stepName: s.stepName || '',
           requestOverride: s.requestOverride || '',

@@ -1,8 +1,10 @@
 # 数据生成器 + 表达式模板 — 实现思路（设计文档）
 
-> 状态：设计阶段，尚未编码。
+> 状态：**前端已实现（mock 运行时，无后端依赖，可独立跑通 UI 与试生成）；后端待实现**（见 §9 落地清单）。
 > 关联文档：`api-component-design.md`（组合组件设计）、`HANDOVER.md`。
-> 关联代码：`backend/.../execute/core/VariableResolver.java`、`Variables.java`、`ExecuteServiceImpl.java`；前端 `base/component/edit.vue`、`case/edit.vue`。
+> 关联代码：
+> - 前端（已实现）：`src/api/types.ts`、`src/api/generator.ts`（内存 mock + 客户端生成运行时）、`src/stores/generatorSelect.ts`（选择态回传）、`src/router/index.ts`（`/base/generator` 隐藏路由）、`src/views/base/generator/index.vue` + `GeneratorFormDialog.vue`、`src/views/base/component/edit.vue`、`src/views/case/edit.vue`、`src/views/case/ExtensionTable.vue`。
+> - 后端（待实现）：`backend/.../execute/core/VariableResolver.java`、`Variables.java`、`ExecuteServiceImpl.java`、`tb_data_generator` 表及 CRUD Controller。
 
 ---
 
@@ -12,7 +14,7 @@
 - 用例/组件的前置（pre）、后置（post）步骤里，经常需要**随机参数**（随机手机号、身份证号、订单号、时间戳偏移等）。
 - 设计文档已预留 `step_type=3` = "其他类型（生成随机数）"，但此前仅是 `component/edit.vue` 中一个 `disabled` 占位卡片（点击只弹 toast）。
 - 用户已确认的方向：
-  1. 做**独立的"数据生成器"页面**（挂在「基础数据」菜单下，路由 `/base/generator`），可按类型查询、可新增生成器类型。
+  1. 做**"数据生成器"页面**（路由 `/base/generator`，**菜单 `hidden: true`，不出现在左侧菜单**，由"组合组件-新增组件-其他类型·生成变量"卡片跳转进入，进入时带 `?mode=select`），可按类型查询、可新增生成器类型。
   2. 采用**「表达式模板 + 生成器」双轨制**：既能用结构化表单配生成器（照顾非技术用户），也能用一行表达式模板任意拼接（满足"固定长度随机数"等灵活需求）。
   3. 表达式模板为最灵活形态，前端可指定扩展（如固定长度随机数），不强制改前后端两边代码。
 
@@ -132,18 +134,23 @@ CREATE TABLE `tb_data_generator` (
 
 ---
 
-## 4. 前端实现思路
+## 4. 前端实现思路（已实现，mock 运行时）
 
-### 4.1 路由与菜单
-- 新增路由 `/base/generator`，挂在左侧「基础数据」菜单下，与「接口库」同级。
-- 复用现有列表/表单页骨架（参考 `base/component/index.vue` + `base/component/edit.vue`）。
+> 后端未实现，因此前端用 `src/api/generator.ts` 的**内存 mock + 客户端生成运行时**跑通全部 UI 与试生成，不依赖后端。后端落地后只需把 `api/generator.ts` 内的函数替换为 HTTP 调用（接口契约见 §3.5）。
 
-### 4.2 列表 / 查询页（`generator/index.vue`）
-- 顶部：`类型`下拉（手机号/姓名/身份证号/随机数/时间戳/枚举/UUID/自定义）+ `名称`输入框 + 查询按钮。
-- 表格列：名称、类型、参数摘要、**示例值**（每次点「试生成」刷新一次，确认格式合规）、描述、操作（编辑/删除）。
-- 右上「+ 添加生成器」进入表单页。
+### 4.1 路由与入口
+- 路由 `/base/generator`，`meta.hidden = true`（**不出现在左侧菜单**）。
+- 唯一入口：组合组件编辑页「新增组件」→「其他类型·生成变量」卡片（原 `disabled` 占位，现已启用，带「可用」标签），点击 `router.push('/base/generator?mode=select')`。
+- 进入管理页时若 `route.query.mode === 'select'`，处于**选择模式**：表格操作列显示「选择」，而非「编辑/删除」。
 
-### 4.3 新增 / 编辑表单页（`generator/edit.vue`）
+### 4.2 管理页（`views/base/generator/index.vue`）
+- 面包屑：组合组件 / 新增组件 / 生成变量。
+- 顶部查询条：`名称`输入 + `类型`下拉（RANDOM/PHONE/IDCARD/NAME/ENUM/TIMESTAMP/UUID/CUSTOM）+ 查询/重置。
+- 表格列：名称、类型、参数摘要、**示例值**（带「换一个」刷新一次，验证格式）、操作（选择模式→选择；否则→编辑/删除）。
+- 右上「+ 新增组件生成器」打开弹窗；右下分页。
+- 选择模式下点「选择」→ 写入 `generatorSelect` Pinia store（seed：`{generatorId, generatorName, variableName, regenEachRun}`）→ `router.push('/base/component')`。
+
+### 4.3 新增 / 编辑弹窗（`GeneratorFormDialog.vue`）
 - 字段：名称、**类型**、描述。
 - **类型相关参数区（随类型动态切换）**：
   - RANDOM：长度 length + 字符集 charset（纯数字/字母/字母数字）+ 前缀/后缀 → **直接覆盖"固定长度随机数"需求**。
@@ -151,23 +158,32 @@ CREATE TABLE `tb_data_generator` (
   - ENUM：候选值列表（多行输入）。
   - TIMESTAMP：格式 + 偏移量（如 `+1d`）。
   - **CUSTOM**：模板输入框 + 右侧「可用函数」清单（点一下插入）+ 「试生成」按钮。
-- 右侧「实时预览」区：调 `/preview` 展示生成结果，与设计一致。
-- **schema 驱动（预留）**：参数区由后端 `/functions` 返回的 schema 动态渲染，未来加新类型只改后端，前端自动长出表单（对应"表达式模板"可扩展性）。
+- 底部「输出变量名」+「每次执行重新生成」switch；右侧「实时预览」区调 `previewGenerator` 展示生成结果。
+- 保存走 `createGenerator` / `updateGenerator`（当前落内存）。
 
-### 4.4 组合组件编辑页接入（`base/component/edit.vue`）
-- 第 200–227 行「选择组件类型」弹框的第二张卡「其他类型·生成随机数」（`disabled` + `onOtherTypeClick` toast）：
-  - 去 `disabled`，改文案为「**生成变量（数据生成器）**」+「可用」标签；
-  - 点击跳转 `/base/generator`（携带"返回组件页"参数）；
-  - 选/建完成后返回，向 `form.steps` 推一条 `stepType:3`（引用 `generatorId` + 指定 `variableName` + `regenEachRun`）；
-  - 左栏步骤树对 `stepType=3` 显示紫色「变量」标签 + 变量名（与用例页一致）。
+### 4.4 客户端生成运行时（`src/api/generator.ts`，替代后端）
+- 内置 `genValue(type, params)` 与 `genFromTemplate(template)`（正则替换 `${func(args)}`）。
+- **8 类生成器 + 9 个函数**，其中 `genIdCard` 带 **GB11643 校验位**，`genName` / `genPhone` / `genUuid` / `genTimestamp` / `genRandom` 等全部前端实现。
+- 内存 `mockStore` 预置 4 条示例生成器（默认手机号/默认身份证号/8位订单号/随机姓名），支持 CRUD 与按类型/名称查询、分页、预览。
+- `getGeneratorFunctions()` 返回函数元信息，供表单「可用函数」清单与帮助展示。
+- **后端落地时**：本文件函数体替换为对 §3.5 接口的调用即可，签名与返回结构保持一致。
 
-### 4.5 用例编辑页接入（`case/edit.vue`）
-- 「添加步骤」弹框类型选项从「单接口 / 组合组件」扩展为「单接口 / 组合组件 / **生成变量**」。
-- `stepType=3` 详情区：生成器下拉（调 `/list`）+ 输出变量名 + 「每次执行重新生成」开关。
-- 保存载荷 `StepParams` 增加 `stepType=3` 分支。
+### 4.5 组合组件编辑页接入（`base/component/edit.vue`）
+- 「选择组件类型」卡片区第二张卡「其他类型·生成变量」去 `disabled`，改文案「生成变量（数据生成器）」+「可用」标签；点击跳转 `/base/generator?mode=select`。
+- 回传机制（无独立路由、避免丢失编辑器状态）：管理页把选中 seed 写入 `generatorSelect` store；组合组件列表页 `index.vue` 在 `onMounted` 检测该 store，有值则以 `:initial-generator-step` 重新进入编辑页，向 `form.steps` 推一条 `stepType:3`（引用 `generatorId` + `variableName` + `regenEachRun`）。
+- 左栏步骤树对 `stepType=3` 显示「变量」标签 + 变量名；右栏详情区显示"生成变量"标题与配置块（输出变量名 + 重新生成开关）。
+- 保存校验：`stepType=3` 必须带 `generatorId`；载荷新增 `generatorId/variableName/regenEachRun` 字段。
 
-### 4.6 共享子组件
-- 抽 `StepGeneratorForm.vue`：生成变量配置表单在 `case/edit.vue` 与 `component/edit.vue` 两处共用，避免重复逻辑。
+### 4.6 用例编辑页接入（`case/edit.vue` + `ExtensionTable.vue`）
+- 前置/后置「新增扩展」弹框的「扩展类型」下拉：原只有「公共接口组件(2)」新增 **「生成变量（数据生成器）(3)」**。
+  - `type===3` 时显示：选择生成器（走 `getGeneratorList`）+ 输出变量名 + 每次执行重新生成开关；
+  - `type!==3` 时显示：选择组件 + 扩展名称 + 返回数据变量。
+- `StepFormItem` / `CaseExtensionStep` 均补充 `generatorId / generatorName / variableName / regenEachRun`。
+- 列表表格 `ExtensionTable.vue` 对 `stepType===3` 渲染绿色「生成变量」标签、`variableName` 作为输出变量，扩展名称取生成器名称（经 `generatorMap`）。
+- 保存载荷 `StepParams` 增加 `stepType=3` 分支（`generatorId / variableName / regenEachRun`）。
+
+### 4.7 共享状态
+- `stores/generatorSelect.ts`：仅用于在"生成器管理页（选择模式）"与"组合组件列表页"之间传递选中 seed，避免借用路由导致的编辑器状态丢失。
 
 ---
 
@@ -218,3 +234,21 @@ CREATE TABLE `tb_data_generator` (
 3. **charset 范围**：`digits / alpha / alnum` 是否够用，是否要加 `upper / lower` 细分。
 4. **生成器隔离粒度**：按 `project_id` 隔离（推荐），还是也允许跨项目共享"公共生成器"。
 5. **步骤字段落库方式**：复用 `request_override` JSON 列，还是新增独立列——倾向新增独立列，语义更清晰。
+
+---
+
+## 9. 当前落地状态（2026-09-16）
+
+| 事项 | 状态 | 说明 |
+|---|---|---|
+| 前端路由 `/base/generator`（hidden） | ✅ 已完成 | `src/router/index.ts` |
+| 生成器管理页 + 表单弹窗 | ✅ 已完成 | `views/base/generator/index.vue` + `GeneratorFormDialog.vue` |
+| 客户端生成运行时（mock，含 GB11643 身份证校验） | ✅ 已完成 | `src/api/generator.ts` |
+| 组合组件编辑页「生成变量」卡片跳转 + 步骤回填 | ✅ 已完成 | `base/component/edit.vue` + `index.vue` + `stores/generatorSelect.ts` |
+| 用例编辑页扩展「生成变量（stepType=3）」接入 + 表格标签 | ✅ 已完成 | `case/edit.vue` + `ExtensionTable.vue` |
+| 类型校验 `vue-tsc --noEmit` | ⏳ 进行中 | 见 HANDOVER 提交记录 |
+| 后端 `tb_data_generator` 表 + CRUD | ⬜ 待实现 | 接口契约见 §3.3 / §3.5 |
+| 后端 `GeneratorEngine` + 函数注册表 + `/preview` | ⬜ 待实现 | 见 §3.1 / §3.2 |
+| 后端 `step_type=3` 执行分支（写变量池 + regenEachRun） | ⬜ 待实现 | 见 §3.4 |
+
+> 前端当前依赖 `src/api/generator.ts` 的内存 mock；后端落地后，仅需将该文件内的函数体替换为对 §3.5 接口的 HTTP 调用，签名保持不变，前端无需重构。

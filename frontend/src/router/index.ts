@@ -52,6 +52,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '组合组件', icon: 'Share' }
       },
       {
+        path: 'base/generator',
+        name: 'GeneratorManage',
+        component: () => import('@/views/base/generator/index.vue'),
+        meta: { title: '数据生成器', hidden: true }
+      },
+      {
         path: 'env',
         name: 'EnvConfig',
         component: () => import('@/views/env/index.vue'),
