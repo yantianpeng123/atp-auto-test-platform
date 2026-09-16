@@ -709,7 +709,9 @@ const apiDialogSelectedId = ref<number | null>(null)
 const replacingUid = ref<number | null>(null)
 
 const apiDialogPreview = computed(
-  () => apiOptions.value.find((a) => a.id === apiDialogSelectedId.value) ?? null
+  () =>
+    apiOptions.value.find((a) => String(a.id) === String(apiDialogSelectedId.value ?? '')) ??
+    null
 )
 
 async function openApiDialog(uid?: number) {
@@ -729,9 +731,19 @@ async function openApiDialog(uid?: number) {
 }
 
 function confirmApiSelect() {
-  const api = apiOptions.value.find((a) => a.id === apiDialogSelectedId.value)
-  if (!api) return
+  const selectedId = apiDialogSelectedId.value
+  if (selectedId == null) return
+  // 类型安全查找：el-select 可能将数值 value 强制为字符串，需统一比较
+  const api = apiOptions.value.find((a) => String(a.id) === String(selectedId))
+  if (!api) {
+    ElMessage.warning('未找到所选接口，请重新选择')
+    return
+  }
+  const headers = api.headers ?? ''
+  const body = api.body ?? ''
+  const description = api.description ?? ''
   if (replacingUid.value != null) {
+    // 更换接口：更新接口标识字段；保留用户已自定义的请求覆盖内容，仅当为空时回显接口默认值
     const step = form.steps.find((s) => s._id === replacingUid.value)
     if (step) {
       step.apiId = api.id
@@ -739,6 +751,8 @@ function confirmApiSelect() {
       step.apiMethod = api.method
       step.apiPath = api.path
       if (!step.stepName) step.stepName = api.name
+      if (!step.requestHeaders) step.requestHeaders = headers
+      if (!step.requestBody) step.requestBody = body
     }
   } else {
     const step: StepEdit = {
@@ -750,12 +764,12 @@ function confirmApiSelect() {
       responseVar: '',
       isDisabled: 0,
       continueOnFail: 0,
-      description: '',
+      description,
       apiName: api.name,
       apiMethod: api.method,
       apiPath: api.path,
-      requestHeaders: '',
-      requestBody: '',
+      requestHeaders: headers,
+      requestBody: body,
       assertions: []
     }
     form.steps.push(step)
