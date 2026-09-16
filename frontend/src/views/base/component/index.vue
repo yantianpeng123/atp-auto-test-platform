@@ -12,7 +12,7 @@
     <template v-else>
       <el-tabs v-model="activeTab" class="module-tabs">
         <!-- 组合组件 -->
-        <el-tab-pane label="组合组件" name="component">
+        <el-tab-pane label="接口组件" name="component">
           <!-- 查询栏 -->
           <el-card shadow="never" class="filter-card">
             <el-form :inline="true" :model="query" @submit.prevent>
