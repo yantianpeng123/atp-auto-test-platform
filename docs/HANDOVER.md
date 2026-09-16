@@ -1,8 +1,9 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-16
+> 更新时间：2026-09-16（本轮：数据生成器前端全链路 + 组合组件交互重构 + 3 项缺陷修复）
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
+> 当前 HEAD：`d46647c`，与 `origin/main` 同步，工作区干净
 
 ---
 
@@ -66,6 +67,22 @@
 | 第四阶段 | 定时任务批次、**报告中心（前后端）**、图表看板、通知 | ✅ 批次/报告前后端完成；图表看板/通知未开始 |
 | 第五阶段 | CI 集成、项目级 RBAC、并发执行 | ⬜ 未开始 |
 
+### 4.0 本轮进度快照（2026-09-16）
+
+本轮（commit `4ffd93a` → `d46647c`，共 8 次提交）聚焦**数据生成器**与**组合组件**两块，全部为**前端改动，后端未动**：
+
+| # | 事项 | 类型 | commit | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | 数据生成器设计文档 + 前端全链路（mock 运行时） | 新增 | `4ffd93a` / `39cdfb3` | ✅ |
+| 2 | 生成器管理并入「组合组件」页签 + 卡片直弹窗（保留选择已有） | 重构 | `3439a70` | ✅ |
+| 3 | 文档同步（设计文档 §9、HANDOVER 4.1/9.2） | 文档 | `324cff8` | ✅ |
+| 4 | 修复：选择接口弹窗下拉为空（改为打开时显式加载） | 缺陷 | `1bd73cd` | ✅ |
+| 5 | 修复：接口数据未回显到步骤详情（首轮，方向有误） | 缺陷 | `e66ffc7` | ⚠️ 未命中根因 |
+| 6 | 修复：同上，**定位真实根因**（`@click` 误传 MouseEvent） | 缺陷 | `d46647c` | ✅ |
+| 7 | 页面改名：「接口组件」页首个页签标签「组合组件」→「接口组件」（仅 1 行） | 样式 | `3d115e2` | ✅ |
+
+**一句话结论**：数据生成器前端已可独立跑通（不依赖后端），后端 `tb_data_generator` + `GeneratorEngine` + `step_type=3` 执行分支**仍未实现**，是当前最大的功能缺口。
+
 ### 4.1 已完成模块
 
 | 模块 | 后端 | 前端 | 说明 |
@@ -78,11 +95,11 @@
 | 数据源管理 | ✅ | ✅ | 数据源模板 CRUD、字段(key) 定义、**数据项多行编辑** |
 | 执行引擎 | ✅ | ✅（调试入口） | HTTP 执行、变量解析、断言引擎、多轮数据驱动 |
 | 测试计划 | ✅ | ✅ | 计划 CRUD、关联用例、Cron 调度、启停、手动执行；项目隔离 + 同名校验 |
-| 组合组件 | ✅ | ✅ | `tb_api_component`/`_step` 两张表；组件 CRUD（`/api/component/**`）；步骤支持单接口(step_type=1)/嵌套组件(2)；执行引擎 `expandSteps/expandOne` 递归展开、防环(深度10)、`component_id/parent_step_id/nest_level` 落 `tb_execution_detail`；独立菜单「组合组件」；前端编辑页已支持调试运行（含结果抽屉） |
+| 组合组件（菜单「接口组件」） | ✅ | ✅ | `tb_api_component`/`_step` 两张表；组件 CRUD（`/api/component/**`）；步骤支持单接口(step_type=1)/嵌套组件(2)/生成变量(3，前端已落地、后端未持久化)；执行引擎 `expandSteps/expandOne` 递归展开、防环(深度10)、`component_id/parent_step_id/nest_level` 落 `tb_execution_detail`；前端编辑页支持调试运行（含结果抽屉）。**09-16 起为双页签结构**：列表态用 `el-tabs` 分「接口组件」/「数据生成器」两个页签（`3d115e2` 将首个页签标签由「组合组件」改为「接口组件」） |
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
-| 数据生成器（前端） | ⬜ | ✅ | 前端全链路已实现：生成器管理并入「组合组件」模块的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
+| 数据生成器（前端） | ⬜ | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
 
 ### 4.2 尚未实现
 
@@ -130,7 +147,9 @@ module/
 api/      request.ts   # axios 拦截器（token 注入、code 拆包、401 跳登录）
           auth.ts / user.ts / project.ts / base.ts
           case.ts / dataset.ts / env.ts / execute.ts
-          types.ts     # 与后端 VO/DTO 对齐的类型
+          component.ts / plan.ts / planBatch.ts
+          generator.ts  # **数据生成器**：客户端生成运行时（mock，待替换为后端 HTTP 调用）
+          types.ts      # 与后端 VO/DTO 对齐的类型
 router/   index.ts     # 路由表 + 登录守卫 + 项目选择守卫
 stores/   user.ts / project.ts / tabs.ts
 layout/   BasicLayout.vue   # 侧边栏 + 顶栏 + 当前项目
@@ -140,9 +159,19 @@ views/
   dashboard/             工作台
   base/version/          工程版本管理
   base/api/              接口列表（含 Jar 导入）
+  base/component/
+    index.vue            **接口组件**（原「组合组件」）：列表态 `el-tabs` 双页签
+                         —— 「接口组件」/「数据生成器」（后者内嵌 generator/index.vue）
+    edit.vue             组件编辑器（非路由，由 index.vue 的 viewMode 切换挂载）
+                         支持 stepType 1 单接口 / 2 嵌套组件 / 3 生成变量
+  base/generator/
+    index.vue            生成器管理（可内嵌页签，也可独立使用）
+    GeneratorFormDialog.vue   新建/编辑生成器（类型动态参数 + 实时预览）
+    GeneratorSelectDialog.vue 选择已有生成器
   env/                   环境配置
   case/index.vue         用例列表（含 **HAR 导入**）
   case/edit.vue          用例编辑（**多步骤串行编排**，约 1600 行）
+  case/ExtensionTable.vue 前置/后置扩展步骤表格（支持 stepType 2/3 标签）
   dataset/               数据源管理（列表 + 数据项 + 编辑）
   dataset/components/    DatasetItemsDialog / DatasetFormDialog / DatasetSelectDialog
   plan/index.vue         测试计划列表（CRUD/关联用例/Cron/启停/执行）
@@ -345,6 +374,18 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 - 用例列表页无「执行」入口，调试仅能在用例编辑页进行。
 - 数据源弹窗缺陷见 9.1（高优先级两项仍待修）。
 
+### 9.3 本轮已修复缺陷（2026-09-16，均在 `base/component/edit.vue`）
+
+| commit | 问题 | 根因 | 修复 |
+| --- | --- | --- | --- |
+| `1bd73cd` | 「接口选择弹框」打开后下拉列表为空 | `openApiDialog()` 从不主动加载列表，只依赖 `form.moduleId` 的 watch 副作用；且 `loadApiOptions` 在 `projectId`/`moduleId` 缺失时静默清空，无 loading 无提示 | 改为打开即 `await loadApiOptions()`；新增 `apiListLoading` 绑定 `el-select :loading`；缺失依赖改为明确 warning |
+| `e66ffc7` | 选择接口点确定后数据未回显（**首轮修复，方向错误**） | 当时误判为 `el-select` 把数值 value 强转成字符串导致 `find` 失败 | 加了 `String()` 比较 + warning + headers/body 回显。**并未命中根因**（见下） |
+| `d46647c` | 同上，真实根因 | **`@click="openApiDialog"` 缺括号**，Vue 把原生 MouseEvent 当首参传入 → `replacingUid` 被赋成 MouseEvent → `confirmApiSelect` 误入「更换接口」分支 → `find(s => s._id === MouseEvent)` 永远匹配不到 → 静默失败（弹窗关、列表无变化、零报错） | `@click="openApiDialog()"`；并防御性改为 `openApiDialog(uid?: number \| Event)` + `const targetUid = typeof uid === 'number' ? uid : null` |
+
+**排查方法论（复用于同类"静默失败"）**：静态读码看不出时，用 `playwright-core` + 系统 Chrome（`channel:'chrome'`，免下载 Chromium）驱动真实应用，dump Vue 组件 `setupState` 比对 Before/After。本次即靠抓到 `replacingUidRaw: { isTrusted: true, _vts: ... }`（原生事件标志）锁定根因。注意 `setupState` 中 ref **已自动解包**，勿再取 `.value`。
+
+**全仓同类隐患**：`case/edit.vue:90` 同为 `@click="openApiDialog"`，但该函数**不接参数**（更换接口走 `openApiDialogForStep(uid)`），Event 被忽略，**无害、未修改**。
+
 ---
 
 ## 十、开发环境注意事项（重要）
@@ -358,7 +399,9 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 4. **文件上传限制**：`spring.servlet.multipart` 已配 100MB（Jar / HAR 导入需要）。
 5. **LocalDateTime 序列化**：统一 `yyyy-MM-dd HH:mm:ss`（`JacksonConfig`）；`spring.jackson.date-format` 只对 `Date` 生效，对 `LocalDateTime` 无效。
 6. **`keys` 是 MySQL 保留字**，手写 SQL 必须加反引号。
-7. **开发协作**：本人（开发者）在工作过程中手动编辑过的代码，后续接手者请勿擅自改动；需调整时先沟通确认。
+7. **Vue 模板 `@click` 传参陷阱（2026-09-16 踩坑）**：`@click="fn"`（不带括号）时，Vue 会把原生 `MouseEvent` 作为**第一个实参**传入。凡 handler 声明了参数（如 `fn(uid?: number)`），模板必须写 `@click="fn()"`；更稳妥的是在函数首行做类型归一化（`typeof uid === 'number' ? uid : null`）。否则会产生「无报错、无变化」的静默失败，静态读码极难发现。排查正则：`@(click|change|input)="[A-Za-z_$][A-Za-z0-9_$]*"`，命中后**逐个确认该 handler 是否声明了参数**（同名无参函数是无害的）。
+8. **前端 Bug 运行时定位**：静态读码查不出时，用 `playwright-core` + 系统 Chrome（`channel:'chrome'`，免下载 ~500MB Chromium）驱动真实应用并 dump Vue `setupState`。账号 `admin/admin123`；**接口数据在项目 3、模块 "3mm"**（项目 1 为 0 条接口，选错模块会误判为"列表为空"）。详见 §9.3。
+9. **开发协作**：本人（开发者）在工作过程中手动编辑过的代码，后续接手者请勿擅自改动；需调整时先沟通确认。
 
 ---
 
