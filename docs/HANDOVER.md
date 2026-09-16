@@ -82,7 +82,7 @@
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
-| 数据生成器（前端） | ⬜ | ✅ | 前端全链路已实现（`/base/generator` 隐藏路由 + 管理页 + 表单弹窗 + 客户端生成运行时 mock，含 GB11643 身份证校验）；组合组件「生成变量」卡片跳转、用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
+| 数据生成器（前端） | ⬜ | ✅ | 前端全链路已实现：生成器管理并入「组合组件」模块的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
 
 ### 4.2 尚未实现
 
@@ -338,7 +338,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ### 9.2 功能缺口
 - ~~报告中心**后端接口**~~：已于 2026-09-14 补齐（详见 4.1「执行报告/报告中心」行），前端由 mock 切真实接口。
-- **数据生成器 + 表达式模板（前端已实现，后端待实现）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成（`/base/generator` 隐藏路由、管理页、表单弹窗、客户端生成运行时 mock、组合组件「生成变量」卡片跳转、用例扩展「生成变量（stepType=3）」接入与表格标签），当前可独立跑通 UI 与试生成、不依赖后端。待实现：新增 `tb_data_generator` 表 + `step_type=3`（生成变量步骤）+ `GeneratorEngine` 表达式解析器（白名单、禁 eval），并将 `src/api/generator.ts` 的 mock 函数替换为对后端 §3.5 接口的 HTTP 调用；现有 `VariableResolver.resolve()` 仅匹配 `${var}`（不含 `()`），新增生成器解析遍处理 `${func(args)}` 后交回变量池。
+- **数据生成器 + 表达式模板（前端已实现，后端待实现）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成：生成器管理并入「组合组件」模块「数据生成器」页签（改造 `generator/index.vue` 内嵌、移除隐藏路由 `/base/generator`）、新增 `GeneratorSelectDialog.vue` 选择已有生成器、组合组件「生成变量」卡片直接弹出（新建/选择已有）写入 `stepType=3` 步骤、客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）、用例扩展「生成变量（stepType=3）」接入与表格标签；已删除跨页回传 store，当前可独立跑通 UI 与试生成、不依赖后端。待实现：新增 `tb_data_generator` 表 + `step_type=3`（生成变量步骤）+ `GeneratorEngine` 表达式解析器（白名单、禁 eval），并将 `src/api/generator.ts` 的 mock 函数替换为对后端 §3.5 接口的 HTTP 调用；现有 `VariableResolver.resolve()` 仅匹配 `${var}`（不含 `()`），新增生成器解析遍处理 `${func(args)}` 后交回变量池。
 - 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
 - 报告页"失败重试"精度（当前整用例重跑降级）。
 - 图表看板、通知、CI 集成、项目级 RBAC、并发执行均未开始。
