@@ -153,7 +153,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
-  (e: 'saved'): void
+  (e: 'saved', info: DataGeneratorInfo): void
 }>()
 
 const name = ref('')
@@ -275,15 +275,16 @@ async function handleSave() {
   }
   saving.value = true
   try {
+    let info: DataGeneratorInfo
     if (props.editData) {
-      await updateGenerator(payload)
+      info = await updateGenerator(payload)
       ElMessage.success('生成器已更新')
     } else {
-      await createGenerator(payload)
+      info = await createGenerator(payload)
       ElMessage.success('生成器已创建')
     }
     emit('update:modelValue', false)
-    emit('saved')
+    emit('saved', info)
   } finally {
     saving.value = false
   }

@@ -255,9 +255,25 @@
       <template #footer>
         <el-button @click="onBack">取消</el-button>
         <el-button v-if="typeChosen === 'api'" type="primary" @click="confirmType">下一步</el-button>
-        <el-button v-else-if="typeChosen === 'gen'" type="primary" @click="goGeneratorManage">进入生成器管理</el-button>
+        <template v-else-if="typeChosen === 'gen'">
+          <el-button type="primary" @click="genDialogVisible = true">新建生成器</el-button>
+          <el-button @click="selectGenVisible = true">选择已有生成器</el-button>
+        </template>
       </template>
     </el-dialog>
+
+    <!-- ============ 生成器弹窗（新建 / 选择已有） ============ -->
+    <GeneratorFormDialog
+      v-model="genDialogVisible"
+      :project-id="projectId"
+      :edit-data="null"
+      @saved="onGenDialogSaved"
+    />
+    <GeneratorSelectDialog
+      v-model="selectGenVisible"
+      :project-id="projectId"
+      @selected="onGenSelected"
+    />
 
     <!-- ============ 接口选择弹框（添加步骤 / 更换接口） ============ -->
     <el-dialog
@@ -387,7 +403,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { Bottom, Delete, Plus, Top } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getApiList, getModuleOptions } from '@/api/base'
@@ -400,6 +415,8 @@ import {
 } from '@/api/component'
 import { executeCase } from '@/api/execute'
 import { useProjectStore } from '@/stores/project'
+import GeneratorFormDialog from '@/views/base/generator/GeneratorFormDialog.vue'
+import GeneratorSelectDialog from '@/views/base/generator/GeneratorSelectDialog.vue'
 import type {
   ApiComponentInfo,
   ApiComponentSaveParams,
@@ -407,25 +424,49 @@ import type {
   AssertionItem,
   CaseExecuteResult,
   ComponentStepSaveParams,
+  DataGeneratorInfo,
   EnvInfo,
   GeneratorStepSeed,
   OptionItem,
   StepExecuteResult
 } from '@/api/types'
 
-const props = defineProps<{ id?: number | null; initialGeneratorStep?: GeneratorStepSeed | null }>()
+const props = defineProps<{ id?: number | null }>()
 const emit = defineEmits<{ (e: 'back'): void; (e: 'saved'): void }>()
 
-const router = useRouter()
-
 const projectStore = useProjectStore()
+
+/** 当前项目 ID（生成器弹窗需传） */
+const projectId = computed(() => projectStore.currentProject?.id ?? 0)
 
 /* ============ 类型选择 ============ */
 const typeDialogVisible = ref(false)
 const typeChosen = ref<'' | 'api' | 'gen'>('')
 
-function goGeneratorManage() {
-  router.push({ path: '/base/generator', query: { mode: 'select' } })
+/* 生成器弹窗（新建 / 选择已有） */
+const genDialogVisible = ref(false)
+const selectGenVisible = ref(false)
+
+function seedFromGenerator(g: DataGeneratorInfo): GeneratorStepSeed {
+  const p = g.params ?? {}
+  return {
+    generatorId: g.id,
+    generatorName: g.name,
+    variableName: String(p.variableName ?? g.name),
+    regenEachRun: p.regenEachRun === false ? false : true
+  }
+}
+
+function onGenDialogSaved(info: DataGeneratorInfo) {
+  addGeneratorStep(seedFromGenerator(info))
+  genDialogVisible.value = false
+  typeDialogVisible.value = false
+}
+
+function onGenSelected(info: DataGeneratorInfo) {
+  addGeneratorStep(seedFromGenerator(info))
+  selectGenVisible.value = false
+  typeDialogVisible.value = false
 }
 
 function confirmType() {
@@ -920,13 +961,6 @@ function onBack() {
 }
 
 onMounted(() => {
-  if (props.initialGeneratorStep) {
-    // 从生成器管理页"选择"返回：直接进入编辑器并写入一条生成变量步骤
-    typeDialogVisible.value = false
-    openEditor(null)
-    addGeneratorStep(props.initialGeneratorStep)
-    return
-  }
   if (props.id != null) {
     openEditor(props.id)
   } else {

@@ -1,81 +1,90 @@
 <template>
   <div class="component-page">
-    <!-- ============ 列表视图 ============ -->
-    <template v-if="viewMode === 'list'">
-      <!-- 查询栏 -->
-      <el-card shadow="never" class="filter-card">
-        <el-form :inline="true" :model="query" @submit.prevent>
-          <el-form-item label="组件名称">
-            <el-input
-              v-model="query.name"
-              placeholder="按名称模糊搜索"
-              clearable
-              class="filter-input"
-              @keyup.enter="handleSearch"
-              @clear="handleSearch"
-            />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-            <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
-          </el-form-item>
-          <el-form-item class="filter-right">
-            <el-button type="primary" :icon="Plus" @click="openCreate">新增组件</el-button>
-          </el-form-item>
-        </el-form>
-      </el-card>
-
-      <!-- 列表 -->
-      <el-card shadow="never" class="table-card">
-        <el-table :data="records" v-loading="loading" border stripe empty-text="暂无组合组件">
-          <el-table-column label="组件名称" min-width="180" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="comp-name">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="描述" min-width="200" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span v-if="row.description" class="comp-desc">{{ row.description }}</span>
-              <span v-else class="comp-muted">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="步骤数" width="90" align="center">
-            <template #default="{ row }">
-              <el-tag size="small" type="info">{{ row.stepCount ?? 0 }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="170" prop="updateTime" />
-          <el-table-column label="操作" width="150" align="center" fixed="right">
-            <template #default="{ row }">
-              <el-button type="primary" link size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
-              <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="pager">
-          <el-pagination
-            v-model:current-page="query.page"
-            v-model:page-size="query.size"
-            :total="total"
-            :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next"
-            background
-            @size-change="loadList"
-            @current-change="loadList"
-          />
-        </div>
-      </el-card>
-    </template>
-
-    <!-- ============ 编辑视图（独立组件） ============ -->
+    <!-- ============ 编辑视图（独立组件，占用整个页面） ============ -->
     <ComponentEdit
-      v-else
+      v-if="viewMode === 'edit'"
       :id="editingId"
-      :initial-generator-step="initialSeed"
       @back="closeEditor"
       @saved="closeEditor"
     />
+
+    <!-- ============ 列表视图（页签：组合组件 / 数据生成器） ============ -->
+    <template v-else>
+      <el-tabs v-model="activeTab" class="module-tabs">
+        <!-- 组合组件 -->
+        <el-tab-pane label="组合组件" name="component">
+          <!-- 查询栏 -->
+          <el-card shadow="never" class="filter-card">
+            <el-form :inline="true" :model="query" @submit.prevent>
+              <el-form-item label="组件名称">
+                <el-input
+                  v-model="query.name"
+                  placeholder="按名称模糊搜索"
+                  clearable
+                  class="filter-input"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+                <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
+              </el-form-item>
+              <el-form-item class="filter-right">
+                <el-button type="primary" :icon="Plus" @click="openCreate">新增组件</el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
+
+          <!-- 列表 -->
+          <el-card shadow="never" class="table-card">
+            <el-table :data="records" v-loading="loading" border stripe empty-text="暂无组合组件">
+              <el-table-column label="组件名称" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="comp-name">{{ row.name }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="描述" min-width="200" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.description" class="comp-desc">{{ row.description }}</span>
+                  <span v-else class="comp-muted">—</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="步骤数" width="90" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" type="info">{{ row.stepCount ?? 0 }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="更新时间" width="170" prop="updateTime" />
+              <el-table-column label="操作" width="150" align="center" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" link size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+                  <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <div class="pager">
+              <el-pagination
+                v-model:current-page="query.page"
+                v-model:page-size="query.size"
+                :total="total"
+                :page-sizes="[10, 20, 50]"
+                layout="total, sizes, prev, pager, next"
+                background
+                @size-change="loadList"
+                @current-change="loadList"
+              />
+            </div>
+          </el-card>
+        </el-tab-pane>
+
+        <!-- 数据生成器（内嵌管理页） -->
+        <el-tab-pane label="数据生成器" name="generator">
+          <GeneratorManage />
+        </el-tab-pane>
+      </el-tabs>
+    </template>
   </div>
 </template>
 
@@ -85,11 +94,14 @@ import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getComponentList, deleteComponent } from '@/api/component'
 import { useProjectStore } from '@/stores/project'
-import { useGeneratorSelectStore } from '@/stores/generatorSelect'
-import type { ApiComponentInfo, GeneratorStepSeed } from '@/api/types'
+import type { ApiComponentInfo } from '@/api/types'
 import ComponentEdit from './edit.vue'
+import GeneratorManage from '@/views/base/generator/index.vue'
 
 const projectStore = useProjectStore()
+
+/* ============ 页签 ============ */
+const activeTab = ref<'component' | 'generator'>('component')
 
 /* ============ 列表 ============ */
 const loading = ref(false)
@@ -135,25 +147,23 @@ function resetQuery() {
 /* ============ 编辑视图切换 ============ */
 const viewMode = ref<'list' | 'edit'>('list')
 const editingId = ref<number | null>(null)
-const generatorSelectStore = useGeneratorSelectStore()
-const initialSeed = ref<GeneratorStepSeed | null>(null)
 
 function openCreate() {
+  activeTab.value = 'component'
   editingId.value = null
-  initialSeed.value = null
   viewMode.value = 'edit'
 }
 
 function openEdit(row: ApiComponentInfo) {
+  activeTab.value = 'component'
   editingId.value = row.id
-  initialSeed.value = null
   viewMode.value = 'edit'
 }
 
 function closeEditor() {
   viewMode.value = 'list'
   editingId.value = null
-  initialSeed.value = null
+  activeTab.value = 'component'
   loadList()
 }
 
@@ -178,14 +188,6 @@ async function handleDelete(row: ApiComponentInfo) {
 }
 
 onMounted(() => {
-  if (generatorSelectStore.seed) {
-    // 从生成器管理页"选择"返回：直接进入编辑器并写入生成变量步骤
-    initialSeed.value = generatorSelectStore.seed
-    generatorSelectStore.clear()
-    editingId.value = null
-    viewMode.value = 'edit'
-    return
-  }
   loadList()
 })
 </script>
@@ -195,6 +197,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.module-tabs :deep(.el-tabs__header) {
+  margin-bottom: 16px;
 }
 
 .filter-card :deep(.el-form-item) {

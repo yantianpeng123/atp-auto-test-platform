@@ -1,15 +1,5 @@
 <template>
   <div class="generator-page">
-    <!-- 面包屑 / 标题 -->
-    <div class="page-breadcrumb">
-      <el-breadcrumb separator="/">
-        <el-breadcrumb-item>组合组件</el-breadcrumb-item>
-        <el-breadcrumb-item>新增组件</el-breadcrumb-item>
-        <el-breadcrumb-item>生成变量</el-breadcrumb-item>
-      </el-breadcrumb>
-      <div class="page-title">数据生成器（生成变量）</div>
-    </div>
-
     <!-- 查询栏 -->
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" :model="query" @submit.prevent>
@@ -64,11 +54,8 @@
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="isSelectMode" type="primary" link size="small" @click="selectGenerator(row)">
-              选择
-            </el-button>
             <el-button type="primary" link size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -101,26 +88,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { genValue } from '@/api/generator'
-import {
-  deleteGenerator,
-  getGeneratorList
-} from '@/api/generator'
+import { deleteGenerator, genValue, getGeneratorList } from '@/api/generator'
 import type { DataGeneratorInfo, GeneratorType } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
-import { useGeneratorSelectStore } from '@/stores/generatorSelect'
 import GeneratorFormDialog from './GeneratorFormDialog.vue'
 
-const route = useRoute()
-const router = useRouter()
 const projectStore = useProjectStore()
-const generatorSelectStore = useGeneratorSelectStore()
-
 const projectId = computed(() => projectStore.currentProject?.id ?? 0)
-const isSelectMode = computed(() => route.query.mode === 'select')
 
 const typeOptions: { label: string; value: GeneratorType }[] = [
   { label: '随机数', value: 'RANDOM' },
@@ -228,18 +204,6 @@ function resetQuery() {
   loadList()
 }
 
-/* 选择模式：选完写回组件编辑页 */
-function selectGenerator(g: DataGeneratorInfo) {
-  const p = g.params ?? {}
-  generatorSelectStore.setSeed({
-    generatorId: g.id,
-    generatorName: g.name,
-    variableName: String(p.variableName ?? g.name),
-    regenEachRun: p.regenEachRun === false ? false : true
-  })
-  router.push('/base/component')
-}
-
 /* 新增 / 编辑弹窗 */
 const dialogVisible = ref(false)
 const editData = ref<DataGeneratorInfo | null>(null)
@@ -286,15 +250,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.page-breadcrumb {
-  margin-bottom: 4px;
-}
-.page-title {
-  margin-top: 6px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1f2937;
 }
 .filter-input {
   width: 200px;
