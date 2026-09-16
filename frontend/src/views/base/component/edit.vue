@@ -244,13 +244,6 @@
           <div class="type-card-title">接口组件（推荐）</div>
           <div class="type-card-desc">由单个或多个接口按顺序组成；可配置请求头 / 请求参数 / 断言，复用性强。</div>
         </div>
-        <div class="type-card" :class="{ active: typeChosen === 'gen' }" @click="typeChosen = 'gen'">
-          <div class="type-card-title">
-            其他类型 · 生成变量（数据生成器）
-            <el-tag size="small" type="success" effect="plain">可用</el-tag>
-          </div>
-          <div class="type-card-desc">通过「数据生成器」生成随机手机号、身份证号、时间戳等，写入变量池供后续步骤引用。</div>
-        </div>
       </div>
       <template #footer>
         <el-button @click="onBack">取消</el-button>
@@ -291,6 +284,7 @@
               v-model="apiDialogSelectedId"
               placeholder="请选择接口（支持搜索）"
               filterable
+              :loading="apiListLoading"
               class="api-dialog-select"
               value-key="id"
             >
@@ -515,6 +509,8 @@ const form = reactive({
 let stepSeq = 1
 
 const apiOptions = ref<ApiInfo[]>([])
+/** 接口列表加载中（选择接口弹窗） */
+const apiListLoading = ref(false)
 const componentOptions = ref<ApiComponentInfo[]>([])
 const componentMap = ref<Record<number, string>>({})
 const moduleOptions = ref<OptionItem[]>([])
@@ -596,11 +592,14 @@ async function loadApiOptions() {
     apiOptions.value = []
     return
   }
+  apiListLoading.value = true
   try {
     const res = await getApiList({ projectId, moduleId: form.moduleId, page: 1, size: 1000 })
     apiOptions.value = res.records
   } catch {
     apiOptions.value = []
+  } finally {
+    apiListLoading.value = false
   }
 }
 
@@ -713,7 +712,11 @@ const apiDialogPreview = computed(
   () => apiOptions.value.find((a) => a.id === apiDialogSelectedId.value) ?? null
 )
 
-function openApiDialog(uid?: number) {
+async function openApiDialog(uid?: number) {
+  if (!projectStore.currentProject?.id) {
+    ElMessage.warning('当前未选择项目，无法加载接口列表')
+    return
+  }
   if (form.moduleId == null) {
     ElMessage.warning('请先在顶部选择归属模块')
     return
@@ -721,6 +724,8 @@ function openApiDialog(uid?: number) {
   replacingUid.value = uid ?? null
   apiDialogSelectedId.value = null
   apiDialogVisible.value = true
+  // 显式拉取接口列表，避免依赖 moduleId watch 的副作用导致下拉为空
+  await loadApiOptions()
 }
 
 function confirmApiSelect() {
