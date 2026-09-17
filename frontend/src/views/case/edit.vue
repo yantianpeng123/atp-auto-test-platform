@@ -1440,7 +1440,7 @@ async function handleSubmit() {
     componentId: s.stepType === 2 ? s.componentId ?? undefined : undefined,
     generatorId: s.stepType === 3 ? s.generatorId ?? undefined : undefined,
     variableName: s.stepType === 3 ? s.variableName?.trim() || undefined : undefined,
-    regenEachRun: s.stepType === 3 ? s.regenEachRun === 1 : undefined,
+    regenEachRun: s.stepType === 3 ? (s.regenEachRun === 1 ? 1 : 0) : undefined,
     sortOrder: i + 1,
     stepName: s.stepName?.trim() || undefined,
     requestOverride: buildRequestOverride(s.requestHeaders, s.requestParams) || undefined,

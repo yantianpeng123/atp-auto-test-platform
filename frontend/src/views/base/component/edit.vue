@@ -666,6 +666,11 @@ async function openEditor(id: number | null) {
           stepType: s.stepType || 1,
           apiId: isChild ? null : (s.apiId ?? null),
           childComponentId: isChild ? (s.componentId ?? null) : null,
+          // 生成变量步骤：后端已落库，这里必须回显，否则打开已保存组件后配置会丢
+          generatorId: s.stepType === 3 ? (s.generatorId ?? null) : null,
+          generatorName: s.stepType === 3 ? (s.generatorName ?? undefined) : undefined,
+          variableName: s.stepType === 3 ? (s.variableName || '') : '',
+          regenEachRun: s.stepType === 3 ? (s.regenEachRun ?? 1) : 1,
           stepName: s.stepName || '',
           responseVar: s.responseVar || '',
           isDisabled: s.isDisabled ?? 0,

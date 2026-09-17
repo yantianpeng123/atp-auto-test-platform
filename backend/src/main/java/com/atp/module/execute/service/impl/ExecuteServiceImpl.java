@@ -8,7 +8,10 @@ import com.atp.common.result.ResultCode;
 import com.atp.common.result.PageResult;
 import com.atp.module.base.entity.ApiComponent;
 import com.atp.module.base.entity.ApiDefinition;
+import com.atp.module.base.entity.DataGenerator;
+import com.atp.module.base.generator.GeneratorEngine;
 import com.atp.module.base.mapper.ApiComponentMapper;
+import com.atp.module.base.mapper.DataGeneratorMapper;
 import com.atp.module.base.mapper.ApiDefinitionMapper;
 import com.atp.module.env.entity.TestEnv;
 import com.atp.module.env.mapper.TestEnvMapper;
@@ -87,6 +90,7 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final UserMapper userMapper;
     private final ApiComponentStepMapper componentStepMapper;
     private final ApiComponentMapper apiComponentMapper;
+    private final DataGeneratorMapper dataGeneratorMapper;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
@@ -226,6 +230,12 @@ public class ExecuteServiceImpl implements ExecuteService {
                 .method(stepVO.getApiMethod())
                 .status("ERROR");
 
+        // 生成变量步骤（stepType=3）：不发起 HTTP 请求，生成值直接写入变量池
+        Integer stepType = stepVO.getStepType() != null ? stepVO.getStepType() : 1;
+        if (stepType == 3) {
+            return generateVariable(stepVO, variables, builder, start);
+        }
+
         try {
             ApiDefinition api = apiDefinitionMapper.selectById(stepVO.getApiId());
             if (api == null) {
@@ -298,6 +308,54 @@ public class ExecuteServiceImpl implements ExecuteService {
             return builder.build();
         } catch (Exception e) {
             return builder.errorMsg(e.getMessage()).durationMs(System.currentTimeMillis() - start).build();
+        }
+    }
+
+    /**
+     * 生成变量步骤（stepType=3）：执行数据生成器，把结果写入变量池，供后续步骤以 {@code ${name}} 引用。
+     *
+     * <p>与 HTTP 步骤的差异：没有 statusCode / 响应头，报告里用 {@code method=GEN}、
+     * {@code url=generator://<type>} 标识，生成值放在 responseBody 便于追溯。
+     *
+     * <p><strong>关于 regenEachRun</strong>：变量池每轮执行前新建，因此这里每轮都会重新生成。
+     * 「跨轮复用同一个值」的语义尚未实现——{@code regen_each_run} 列已落库但不参与此处判断。
+     */
+    private StepExecuteVO generateVariable(CaseStepVO stepVO, Variables variables,
+                                           StepExecuteVO.StepExecuteVOBuilder builder, long start) {
+        try {
+            if (stepVO.getGeneratorId() == null) {
+                return builder.status("ERROR").errorMsg("生成变量步骤未配置数据生成器")
+                        .durationMs(System.currentTimeMillis() - start).build();
+            }
+            DataGenerator generator = dataGeneratorMapper.selectById(stepVO.getGeneratorId());
+            if (generator == null) {
+                return builder.status("ERROR").errorMsg("数据生成器不存在或已被删除")
+                        .durationMs(System.currentTimeMillis() - start).build();
+            }
+            String varName = stepVO.getVariableName();
+            if (varName == null || varName.isBlank()) {
+                return builder.status("ERROR").errorMsg("生成变量步骤未配置变量名")
+                        .durationMs(System.currentTimeMillis() - start).build();
+            }
+            String value = GeneratorEngine.generate(generator.getType(),
+                    GeneratorEngine.parseParams(generator.getParams()));
+            variables.put(varName, value);
+
+            JSONObject trace = JSONUtil.createObj()
+                    .set("generator", generator.getName())
+                    .set("type", generator.getType())
+                    .set("variable", varName);
+            return builder
+                    .method("GEN")
+                    .url("generator://" + (generator.getType() == null ? "UNKNOWN" : generator.getType()))
+                    .requestBody(trace.toStringPretty())
+                    .responseBody(value)
+                    .status("PASSED")
+                    .durationMs(System.currentTimeMillis() - start)
+                    .build();
+        } catch (Exception e) {
+            return builder.status("ERROR").errorMsg(e.getMessage())
+                    .durationMs(System.currentTimeMillis() - start).build();
         }
     }
 

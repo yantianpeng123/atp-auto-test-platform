@@ -5,7 +5,9 @@ import com.atp.common.result.ResultCode;
 import com.atp.module.base.dto.ApiComponentCreateRequest;
 import com.atp.module.base.entity.ApiComponent;
 import com.atp.module.base.entity.ApiComponentStep;
+import com.atp.module.base.generator.GeneratorEngine;
 import com.atp.module.base.mapper.ApiComponentMapper;
+import com.atp.module.base.mapper.DataGeneratorMapper;
 import com.atp.module.base.mapper.ApiComponentStepMapper;
 import com.atp.module.base.service.ApiComponentService;
 import com.atp.module.base.vo.ApiComponentVO;
@@ -30,6 +32,7 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         implements ApiComponentService {
 
     private final ApiComponentStepMapper componentStepMapper;
+    private final DataGeneratorMapper dataGeneratorMapper;
 
     @Override
     public com.atp.common.result.PageResult<ApiComponentVO> selectComponentPage(long page, long size,
@@ -135,10 +138,22 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         for (int i = 0; i < steps.size(); i++) {
             ApiComponentCreateRequest.ComponentStepDTO dto = steps.get(i);
             Integer stepType = dto.getStepType() != null ? dto.getStepType() : 1;
+            // 生成变量步骤（stepType=3）：校验生成器存在 + 变量名合法
+            String variableName = null;
+            Integer regenEachRun = null;
             if (stepType == 2) {
                 if (dto.getChildComponentId() == null) {
                     throw new BizException(ResultCode.BAD_REQUEST, "嵌套组件步骤必须选择引用的组件");
                 }
+            } else if (stepType == 3) {
+                if (dto.getGeneratorId() == null) {
+                    throw new BizException(ResultCode.BAD_REQUEST, "生成变量步骤必须选择数据生成器");
+                }
+                if (dataGeneratorMapper.selectById(dto.getGeneratorId()) == null) {
+                    throw new BizException(ResultCode.NOT_FOUND, "数据生成器不存在或已被删除");
+                }
+                variableName = GeneratorEngine.checkVariableName(dto.getVariableName());
+                regenEachRun = dto.getRegenEachRun() != null ? dto.getRegenEachRun() : 1;
             } else {
                 if (dto.getApiId() == null) {
                     throw new BizException(ResultCode.BAD_REQUEST, "接口步骤必须选择关联接口");
@@ -149,6 +164,9 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
             step.setStepType(stepType);
             step.setApiId(dto.getApiId());
             step.setChildComponentId(dto.getChildComponentId());
+            step.setGeneratorId(stepType == 3 ? dto.getGeneratorId() : null);
+            step.setVariableName(variableName);
+            step.setRegenEachRun(stepType == 3 ? regenEachRun : 1);
             step.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : i + 1);
             step.setStepName(trimToNull(dto.getStepName()));
             step.setRequestOverride(trimToNull(dto.getRequestOverride()));

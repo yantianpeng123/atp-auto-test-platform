@@ -1,10 +1,10 @@
 # 数据生成器 + 表达式模板 — 实现思路（设计文档）
 
-> 状态：**前端已实现（mock 运行时，无后端依赖，可独立跑通 UI 与试生成）；后端待实现**（见 §9 落地清单）。
+> 状态：**前后端已闭环（2026-09-17 阶段1/2/3 全部落地）**。前端全链路已实现；后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式引擎 + `step_type=3` 执行分支均已实现，`src/api/generator.ts` 的 mock 已替换为真实 HTTP 调用。详见 `HANDOVER.md` §4.0.1 与 §11-P0。
 > 关联文档：`api-component-design.md`（组合组件设计）、`HANDOVER.md`。
 > 关联代码：
 > - 前端（已实现）：`src/api/types.ts`、`src/api/generator.ts`（内存 mock + 客户端生成运行时）、`src/stores/generatorSelect.ts`（选择态回传）、`src/router/index.ts`（`/base/generator` 隐藏路由）、`src/views/base/generator/index.vue` + `GeneratorFormDialog.vue`、`src/views/base/component/edit.vue`、`src/views/case/edit.vue`、`src/views/case/ExtensionTable.vue`。
-> - 后端（待实现）：`backend/.../execute/core/VariableResolver.java`、`Variables.java`、`ExecuteServiceImpl.java`、`tb_data_generator` 表及 CRUD Controller。
+> - 后端（已落地）：`backend/.../module/base/generator/GeneratorEngine.java` + `GeneratorFunc.java`、`/module/base/controller/GeneratorController.java`、`/module/base/entity/DataGenerator.java`、`tb_data_generator` 表及 CRUD、`/module/execute/service/impl/ExecuteServiceImpl.java`（`stepType==3` 分支 `generateVariable`）、`VariableResolver.java`（追加生成器解析遍）。
 
 ---
 
@@ -237,21 +237,21 @@ CREATE TABLE `tb_data_generator` (
 
 ---
 
-## 9. 当前落地状态（2026-09-16）
+## 9. 当前落地状态（2026-09-17 全部完成）
 
 | 事项 | 状态 | 说明 |
 |---|---|---|
 | 生成器管理并入「组合组件」页签 | ✅ 已完成 | `views/base/component/index.vue` 用 `el-tabs` 新增「数据生成器」页签，内嵌改造后的 `views/base/generator/index.vue`（去面包屑/选择模式/路由依赖） |
 | 生成器管理页 + 表单弹窗 | ✅ 已完成 | `views/base/generator/index.vue` + `GeneratorFormDialog.vue`（保存后 `emit('saved', info)` 回传完整 `DataGeneratorInfo`） |
-| 客户端生成运行时（mock，含 GB11643 身份证校验） | ✅ 已完成 | `src/api/generator.ts` |
+| 客户端生成运行时（已接真实 HTTP） | ✅ 已完成 | `src/api/generator.ts`（原 mock 已替换为对 `/api/base/generator/**` 的 HTTP 调用，签名不变） |
 | 新增「选择已有生成器」弹窗 | ✅ 已完成 | `views/base/generator/GeneratorSelectDialog.vue`（名称/类型查询 + 示例值 + 选择） |
 | 组合组件编辑页「生成变量」卡片直弹窗（保留选择已有） | ✅ 已完成 | `base/component/edit.vue`：卡片 footer 提供「新建生成器」(`GeneratorFormDialog`) + 「选择已有生成器」(`GeneratorSelectDialog`)；保存/选中后写入 `stepType=3` 步骤，无需借路由 |
 | 用例编辑页扩展「生成变量（stepType=3）」接入 + 表格标签 | ✅ 已完成 | `case/edit.vue` + `ExtensionTable.vue` |
 | 类型校验 `vue-tsc --noEmit` | ✅ 通过 | 提交 `39cdfb3` 后已通过；本次交互重构提交后再通过一次 |
 | 隐藏路由 `/base/generator` 与 `generatorSelect` store | 🗑️ 已移除 | 原隐藏路由已从 `router/index.ts` 删除；跨页回传 store `stores/generatorSelect.ts` 已删除（卡片直弹窗后不再需要） |
-| 后端 `tb_data_generator` 表 + CRUD | ⬜ 待实现 | 接口契约见 §3.3 / §3.5 |
-| 后端 `GeneratorEngine` + 函数注册表 + `/preview` | ⬜ 待实现 | 见 §3.1 / §3.2 |
-| 后端 `step_type=3` 执行分支（写变量池 + regenEachRun） | ⬜ 待实现 | 见 §3.4 |
+| 后端 `tb_data_generator` 表 + CRUD | ✅ 已完成 | 阶段2（`bdb1700`），接口契约见 §3.3 / §3.5 |
+| 后端 `GeneratorEngine` + 函数注册表 + `/preview` | ✅ 已完成 | 阶段1（`8896158` / `6c77c27`），见 §3.1 / §3.2 |
+| 后端 `step_type=3` 执行分支（写变量池；regenEachRun 跨轮语义暂未实现） | ✅ 已完成 | 阶段3（`28d1d19`），见 §3.4；`regen_each_run` 列已落库，跨轮固定值语义按需求暂未实现（变量池每轮重建即每轮重算） |
 
-> **交互约定（2026-09-16 调整）**：生成器管理不再作为独立隐藏路由，而是并入「组合组件」模块的「数据生成器」页签；组合组件编辑器内点击「生成变量」卡片直接弹出（新建 / 选择已有）弹窗，写入 `stepType=3` 步骤。后端落地前，前端 `src/api/generator.ts` 的内存 mock 顶上；后端完工后仅替换该文件函数体为对 §3.5 接口的 HTTP 调用，签名不变、前端结构不重构。
+> **交互约定（2026-09-16 调整，2026-09-17 后端已落地）**：生成器管理不再作为独立隐藏路由，而是并入「组合组件」模块的「数据生成器」页签；组合组件编辑器内点击「生成变量」卡片直接弹出（新建 / 选择已有）弹窗，写入 `stepType=3` 步骤。前端 `src/api/generator.ts` 的内存 mock 已于阶段2替换为真实 HTTP 调用（签名不变），后端 `tb_data_generator` 表 + `GeneratorEngine` + `step_type=3` 执行分支已于 09-17 三阶段全部落地，功能已完整闭环。
 

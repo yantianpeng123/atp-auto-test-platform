@@ -6,7 +6,9 @@ import com.atp.module.base.entity.ApiDefinition;
 import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
+import com.atp.module.base.generator.GeneratorEngine;
 import com.atp.module.base.mapper.ApiDefinitionMapper;
+import com.atp.module.base.mapper.DataGeneratorMapper;
 import com.atp.module.base.mapper.ApplicationMapper;
 import com.atp.module.base.mapper.ApplicationModuleMapper;
 import com.atp.module.base.mapper.ApplicationVersionMapper;
@@ -61,6 +63,7 @@ public class CaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> imple
     private final ApplicationModuleMapper applicationModuleMapper;
     private final ApplicationVersionMapper applicationVersionMapper;
     private final ApplicationMapper applicationMapper;
+    private final DataGeneratorMapper dataGeneratorMapper;
 
     @Override
     public IPage<CaseVO> selectCasePage(long page, long size, Long projectId, Long apiId,
@@ -357,10 +360,22 @@ public class CaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> imple
         for (int i = 0; i < steps.size(); i++) {
             StepDTO dto = steps.get(i);
             Integer stepType = dto.getStepType() != null ? dto.getStepType() : 1;
+            // 生成变量步骤（stepType=3）：校验生成器存在 + 变量名合法；结果在 saveSteps 末尾统一落库
+            String variableName = null;
+            Integer regenEachRun = null;
             if (stepType == 2) {
                 if (dto.getComponentId() == null) {
                     throw new BizException(ResultCode.BAD_REQUEST, "组合组件步骤必须选择引用的组件");
                 }
+            } else if (stepType == 3) {
+                if (dto.getGeneratorId() == null) {
+                    throw new BizException(ResultCode.BAD_REQUEST, "生成变量步骤必须选择数据生成器");
+                }
+                if (dataGeneratorMapper.selectById(dto.getGeneratorId()) == null) {
+                    throw new BizException(ResultCode.NOT_FOUND, "数据生成器不存在或已被删除");
+                }
+                variableName = GeneratorEngine.checkVariableName(dto.getVariableName());
+                regenEachRun = dto.getRegenEachRun() != null ? dto.getRegenEachRun() : 1;
             } else {
                 if (dto.getApiId() == null) {
                     throw new BizException(ResultCode.BAD_REQUEST, "请选择步骤关联接口");
@@ -372,6 +387,9 @@ public class CaseServiceImpl extends ServiceImpl<TestCaseMapper, TestCase> imple
             step.setPhase(dto.getPhase() != null ? dto.getPhase() : "main");
             step.setStepType(stepType);
             step.setComponentId(dto.getComponentId());
+            step.setGeneratorId(stepType == 3 ? dto.getGeneratorId() : null);
+            step.setVariableName(variableName);
+            step.setRegenEachRun(stepType == 3 ? regenEachRun : 1);
             step.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : i + 1);
             step.setStepName(trimToNull(dto.getStepName()));
             step.setRequestOverride(normalizeJson(dto.getRequestOverride(), "步骤请求覆盖内容"));

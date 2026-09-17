@@ -146,16 +146,9 @@ public class DataGeneratorServiceImpl extends ServiceImpl<DataGeneratorMapper, D
         return JSONUtil.toJsonStr(params);
     }
 
+    /** 解析逻辑统一走 GeneratorEngine，避免与执行引擎出现两套实现 */
     private Map<String, Object> parseParams(String json) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            return JSONUtil.parseObj(json);
-        } catch (Exception e) {
-            log.warn("生成器 params 不是合法 JSON，按空处理：{}", json);
-            return null;
-        }
+        return GeneratorEngine.parseParams(json);
     }
 
     private DataGeneratorVO toVO(DataGenerator entity) {

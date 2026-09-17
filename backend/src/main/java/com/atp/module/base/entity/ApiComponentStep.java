@@ -22,7 +22,7 @@ public class ApiComponentStep {
 
     private Long componentId;
 
-    /** 步骤类型：1-单接口 2-嵌套组件 */
+    /** 步骤类型：1-单接口 2-嵌套组件 3-生成变量 */
     private Integer stepType;
 
     /** 关联接口ID（stepType=1 时必填） */
@@ -30,6 +30,15 @@ public class ApiComponentStep {
 
     /** 嵌套组件ID（stepType=2 时引用） */
     private Long childComponentId;
+
+    /** 数据生成器ID（stepType=3 时引用） */
+    private Long generatorId;
+
+    /** 生成值写入的变量名（stepType=3 时必填） */
+    private String variableName;
+
+    /** 每轮是否重新生成值：0-否 1-是（stepType=3；当前一律每轮重算） */
+    private Integer regenEachRun;
 
     private Integer sortOrder;
 

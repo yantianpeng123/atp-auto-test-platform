@@ -1,9 +1,9 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-16（本轮：数据生成器前端全链路 + 组合组件交互重构 + 3 项缺陷修复）
+> 更新时间：2026-09-17（本轮：数据生成器后端闭环 阶段1+2+3 全部落地）
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
-> 当前 HEAD：`d46647c`，与 `origin/main` 同步，工作区干净
+> 当前 HEAD：`28d1d19`，与 `origin/main` 同步，工作区干净
 
 ---
 
@@ -81,7 +81,18 @@
 | 6 | 修复：同上，**定位真实根因**（`@click` 误传 MouseEvent） | 缺陷 | `d46647c` | ✅ |
 | 7 | 页面改名：「接口组件」页首个页签标签「组合组件」→「接口组件」（仅 1 行） | 样式 | `3d115e2` | ✅ |
 
-**一句话结论**：数据生成器前端已可独立跑通（不依赖后端），后端 `tb_data_generator` + `GeneratorEngine` + `step_type=3` 执行分支**仍未实现**，是当前最大的功能缺口。
+**一句话结论**：数据生成器前后端已完全闭环——前端全链路自 09-16 跑通，后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式引擎 + `step_type=3` 执行分支已于 **2026-09-17 阶段1/2/3 全部落地**（详见 §4.0.1 与 §11-P0）。
+
+### 4.0.1 后端闭环进度快照（2026-09-17）
+
+本轮（commit `8896158` → 阶段3 提交，共 3 次提交）补齐数据生成器后端，全部基于前端已放开的能力做收口，修复了"前端已放开、后端为空"的静默数据丢失：
+
+| # | 事项 | 类型 | commit | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | 阶段1：`GeneratorEngine` 表达式解析器 + 9 函数注册表 + `/preview` + `/functions`，接线 `VariableResolver` | 新增 | `8896158` | ✅ |
+| 2 | 阶段1 隐患修复：`idCard` 非法字符 / `randomInt` 溢出 / 漏括号静默吞 / 契约对齐 / `ThreadLocalRandom` 注释 | 缺陷 | `6c77c27` | ✅ |
+| 3 | 阶段2：`tb_data_generator` 建表 + CRUD + `/functions`；`src/api/generator.ts` mock 全部换真实 HTTP，列表「示例值」改走 `/preview` | 新增 | `bdb1700` | ✅ |
+| 4 | 阶段3：`tb_case_step`/`tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；`ExecuteServiceImpl` 增 `stepType==3` 分支（生成值写入变量池）；保存链路对 `stepType=3` 做校验（不再因 apiId 空报"请选择步骤关联接口"） | 新增 | `28d1d19` | ✅ |
 
 ### 4.1 已完成模块
 
@@ -99,7 +110,7 @@
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
-| 数据生成器（**阶段 1+2 已落地**） | 部分 | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
+| 数据生成器（**阶段 1+2+3 已落地**） | ✅ | ✅ | 前后端完全闭环：前端全链路（生成器管理并入「接口组件」页「数据生成器」页签，`GeneratorSelectDialog`/`GeneratorFormDialog` 直弹，`stepType=3` 步骤写入，客户端 `api/generator.ts` 已接真实 HTTP）；**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式引擎 + `step_type=3` 执行分支均已实现**。执行时 `stepType=3` 调 `GeneratorEngine.generate(type, params)` 生成值并写入变量池，后续步骤可用 `${variableName}` 引用；`regen_each_run` 列已落库但跨轮固定语义按需求**暂不实现**（变量池每轮重建即每轮重算）。保存链路（`CaseServiceImpl`/`ApiComponentServiceImpl`）对 `stepType=3` 校验 `generatorId` 存在、`variableName` 合法，不再因 `apiId` 空报"请选择步骤关联接口"。详见 `docs/data-generator-and-expression-design.md` |
 
 ### 4.2 尚未实现
 
@@ -311,7 +322,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | GET | `/api/plan/batch/{id}/runs` | 批次运行历史 |
 | GET | `/api/plan/batch/run/{runId}` | 某次运行实时状态（前端轮询） |
 
-### 数据生成器（⬜ 后端待实现，前端 mock 已对接）
+### 数据生成器（✅ 后端已落地，与前端 mock 一致）
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/base/generator/list` | 按 type/name 查询 + 分页（对应管理页查询） |
@@ -319,7 +330,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | PUT | `/api/base/generator/{id}` | 编辑 |
 | DELETE | `/api/base/generator/{id}` | 删除（逻辑删除，沿用 `deleted`） |
 | GET | `/api/base/generator/functions` | 函数名+参数+说明+示例（前端帮助/语法提示） |
-| POST | `/api/base/generator/preview` | 传 template 或 type+params，返回试生成结果 |
+| POST | `/api/base/generator/preview` | 传 template 或 type+params，返回试生成结果（列表「示例值」也走此接口） |
 
 ---
 
@@ -356,7 +367,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ### 9.1 待修复缺陷
 | 优先级 | 问题 | 位置 |
 | --- | --- | --- |
-| **紧急** | **`stepType=3`（生成变量）后端无支撑，存在静默数据丢失**：①`tb_case_step`/`tb_api_component_step` 无 `generator_id`/`variable_name`/`regen_each_run` 列，实体 `CaseStep`/`ApiComponentStep` 也无对应字段 → 前端保存的生成器配置**不落库、刷新即丢**；②`ExecuteServiceImpl.expandOne()` 仅对 `stepType==2` 分支处理，3 会落到「普通单接口步骤」分支，而此时 `apiId` 为 null → 执行期必然报错。当前前端已放开该入口，属于"已交付但不可用的功能" | `backend/.../execute/ExecuteServiceImpl.java:330`、`entity/CaseStep.java`、`db/schema.sql` |
+| ~~紧急~~ **已修复（2026-09-17 阶段3）** | ~~**`stepType=3`（生成变量）后端无支撑，存在静默数据丢失**~~：①`tb_case_step`/`tb_api_component_step` 已补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；②`ExecuteServiceImpl.executeStep()` 已增 `stepType==3` 分支（`generateVariable`），生成值写入变量池；③保存链路对 `stepType=3` 校验 `generatorId`/`variableName`，不再因 `apiId` 空误报"请选择步骤关联接口" | `backend/.../execute/ExecuteServiceImpl.java`、`entity/CaseStep.java`、`db/schema.sql` |
 | 高 | `DatasetFormDialog` 的 watch 先 `await loadCaseOptions()` 再给 form 赋值；请求挂起时**表单完全不回显** | `views/dataset/components/DatasetFormDialog.vue` |
 | 高 | 编辑弹窗的「关联用例」依赖 `projectStore.currentProject`；数据源管理页无工程上下文，且用例可能属于其他工程 → 下拉为空、只显示裸 `caseId` | 同上 |
 | 中 | `DatasetItemsDialog.loadItems()` 无 `catch`，接口失败静默变空表、无任何提示 | `views/dataset/components/DatasetItemsDialog.vue` |
@@ -368,7 +379,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ### 9.2 功能缺口
 - ~~报告中心**后端接口**~~：已于 2026-09-14 补齐（详见 4.1「执行报告/报告中心」行），前端由 mock 切真实接口。
-- **数据生成器 + 表达式模板（前端已实现，后端待实现）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成：生成器管理并入「组合组件」模块「数据生成器」页签（改造 `generator/index.vue` 内嵌、移除隐藏路由 `/base/generator`）、新增 `GeneratorSelectDialog.vue` 选择已有生成器、组合组件「生成变量」卡片直接弹出（新建/选择已有）写入 `stepType=3` 步骤、客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）、用例扩展「生成变量（stepType=3）」接入与表格标签；已删除跨页回传 store，当前可独立跑通 UI 与试生成、不依赖后端。待实现：新增 `tb_data_generator` 表 + `step_type=3`（生成变量步骤）+ `GeneratorEngine` 表达式解析器（白名单、禁 eval），并将 `src/api/generator.ts` 的 mock 函数替换为对后端 §3.5 接口的 HTTP 调用；现有 `VariableResolver.resolve()` 仅匹配 `${var}`（不含 `()`），新增生成器解析遍处理 `${func(args)}` 后交回变量池。
+- **数据生成器 + 表达式模板（前端已实现，后端已于 2026-09-17 阶段1/2/3 全部落地）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成：生成器管理并入「组合组件」模块「数据生成器」页签（改造 `generator/index.vue` 内嵌、移除隐藏路由 `/base/generator`）、新增 `GeneratorSelectDialog.vue` 选择已有生成器、组合组件「生成变量」卡片直接弹出（新建/选择已有）写入 `stepType=3` 步骤、客户端运行时 `api/generator.ts` 已接真实 HTTP、用例扩展「生成变量（stepType=3）」接入与表格标签。后端已补齐：`tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式解析器（白名单、禁 eval）+ `step_type=3` 执行分支（生成值写入变量池）+ `VariableResolver` 追加生成器解析遍（`${func(args)}`）。`regen_each_run` 跨轮固定语义按需求暂不实现（变量池每轮重建即每轮重算）。
 - 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
 - 报告页"失败重试"精度（当前整用例重跑降级）。
 - 图表看板、通知、CI 集成、项目级 RBAC、并发执行均未开始。
@@ -413,13 +424,13 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 > 排序依据：**已暴露的风险 > 阻塞日常操作的缺陷 > 体验补齐 > 长期规划**。
 > 更新于 2026-09-17，依据对后端代码与 `schema.sql` 的实测核对。
 
-### P0 · 数据生成器后端闭环（最高，且已被前端"提前放开"）
-现状：前端 `stepType=3` 入口已全量可用，但后端**无表、无字段、无执行分支**（见 §9.1 紧急项），用户配置的生成器**保存即丢、执行必报错**。这不是"新功能"，是**已交付功能不可用**，应最先修。
+### P0 · 数据生成器后端闭环（✅ 已于 2026-09-17 阶段1/2/3 全部完成）
+现状：前端 `stepType=3` 入口早已全量可用，此前后端**无表、无字段、无执行分支**，用户配置的生成器**保存即丢、执行必报错**；该缺口已于 09-17 三阶段全部补齐，功能已可用。
 
 建议拆为 3 个可独立上线的阶段，按此顺序做：
 1. **阶段 1（收益最高、零前端改动）** —— ✅ **已完成（2026-09-17）**：`GeneratorEngine` 表达式解析器 + 函数注册表 + `POST /api/base/generator/preview` + `GET /functions`。落地后参数里可直接写 `${phone()}` / `${randomInt(8)}`，**无需等建表**。9 个白名单函数：`randomInt` `randomFloat` `randomString` `uuid` `phone` `idCard` `name` `enum` `timestamp`。成果：`module/base/generator/GeneratorEngine.java`、`GeneratorFunc.java`、`module/base/controller/GeneratorController.java`；接线点 `VariableResolver.resolve()`（变量替换后追加一遍生成器解析）。
 2. **阶段 2** —— ✅ **已完成（2026-09-17）**：建 `tb_data_generator`（`params` 为 JSON 列）+ CRUD + `/functions`；`src/api/generator.ts` 的 mock 已全部替换为真实 HTTP 调用（签名不变），客户端生成运行时 `genValue`/`genFromTemplate` 与 `mockStore` 已删除——**列表里的「示例值」改走 `/preview`，与用例执行时的真实生成结果同源**。新增同名校验与类型白名单校验（`GeneratorEngine.supportedTypes()` 为唯一真源）。
-3. **阶段 3**：给 `tb_case_step` / `tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体，再在 `ExecuteServiceImpl.expandOne()` 增加 `stepType==3` 分支（生成值写入变量池，`regenEachRun` 控制每轮是否重算）。
+3. **阶段 3** —— ✅ **已完成（2026-09-17）**：给 `tb_case_step` / `tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；`ExecuteServiceImpl.executeStep()` 增 `stepType==3` 分支（`generateVariable`，生成值写入变量池）；保存链路（`CaseServiceImpl`/`ApiComponentServiceImpl`）对 `stepType=3` 校验 `generatorId` 存在、`variableName` 合法（`GeneratorEngine.validateVariableName`），不再因 `apiId` 空报"请选择步骤关联接口"。**注**：`regen_each_run` 列已落库，但跨轮固定语义按需求暂不实现（变量池每轮重建即每轮重算），已在代码注释与 §4.1 标注。
 
 详细设计见 `docs/data-generator-and-expression-design.md` §3。
 

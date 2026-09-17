@@ -1,7 +1,9 @@
 package com.atp.module.base.generator;
 
+import cn.hutool.json.JSONUtil;
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +29,7 @@ import java.util.Set;
  * <p>安全边界：无 eval / ScriptEngine；递归深度 ≤ {@value #MAX_DEPTH}；随机串长度上限见
  * {@link GeneratorFunc#MAX_STRING_LENGTH}。
  */
+@Slf4j
 public final class GeneratorEngine {
 
     private static final int MAX_DEPTH = 10;
@@ -70,6 +73,47 @@ public final class GeneratorEngine {
      */
     public static boolean isFunction(String name) {
         return name != null && REGISTRY.containsKey(name);
+    }
+
+    /**
+     * 解析生成器 {@code params}（库里是 JSON 文本）为 Map。
+     *
+     * <p>放在本类是为了让「试生成」「正式执行」「VO 出参」三处共用同一份解析逻辑，
+     * 避免解析器与调用方各写一份导致行为漂移。非法 JSON 按空参数处理并记一条 warn。
+     */
+    public static Map<String, Object> parseParams(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return JSONUtil.parseObj(json);
+        } catch (Exception e) {
+            log.warn("生成器 params 不是合法 JSON，按空处理：{}", json);
+            return null;
+        }
+    }
+
+    /**
+     * 校验「生成变量」步骤的变量名，返回去掉首尾空格后的结果。
+     *
+     * <p>变量名会被后续步骤以 {@code ${name}} 引用，因此不允许空白与 {@code ${}} 本身——
+     * 这类名字写出来一定引用不到，与其等到执行时静默替换成空串，不如保存时就拦住。
+     *
+     * @throws BizException 变量名为空或含非法字符
+     */
+    public static String checkVariableName(String rawName) {
+        String name = rawName == null ? "" : rawName.trim();
+        if (name.isEmpty()) {
+            throw new BizException(ResultCode.BAD_REQUEST, "生成变量步骤必须填写变量名");
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == '$' || c == '{' || c == '}' || Character.isWhitespace(c)) {
+                throw new BizException(ResultCode.BAD_REQUEST,
+                        "变量名不能包含空格或 $ { } 这些字符：「" + name + "」");
+            }
+        }
+        return name;
     }
 
     /**

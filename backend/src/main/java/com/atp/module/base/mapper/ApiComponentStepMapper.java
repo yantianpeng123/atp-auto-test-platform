@@ -25,6 +25,9 @@ public interface ApiComponentStepMapper extends BaseMapper<ApiComponentStep> {
                    s.step_type,
                    s.child_component_id AS componentId,
                    s.api_id            AS apiId,
+                   s.generator_id,
+                   s.variable_name,
+                   s.regen_each_run,
                    s.sort_order,
                    s.step_name,
                    s.request_override,
@@ -33,9 +36,11 @@ public interface ApiComponentStepMapper extends BaseMapper<ApiComponentStep> {
                    s.is_disabled,
                    a.name   AS api_name,
                    a.method AS api_method,
-                   a.path   AS api_path
+                   a.path   AS api_path,
+                   g.name   AS generator_name
             FROM tb_api_component_step s
             LEFT JOIN tb_api_definition a ON s.api_id = a.id AND a.deleted = 0
+            LEFT JOIN tb_data_generator g ON s.generator_id = g.id AND g.deleted = 0
             WHERE s.deleted = 0
               AND s.component_id = #{componentId}
             ORDER BY s.sort_order ASC

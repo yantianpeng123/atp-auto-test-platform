@@ -25,6 +25,9 @@ public interface CaseStepMapper extends BaseMapper<CaseStep> {
                    s.phase,
                    s.step_type,
                    s.component_id,
+                   s.generator_id,
+                   s.variable_name,
+                   s.regen_each_run,
                    s.sort_order,
                    s.step_name,
                    s.request_override,
@@ -36,9 +39,11 @@ public interface CaseStepMapper extends BaseMapper<CaseStep> {
                    s.description,
                    a.name   AS api_name,
                    a.method AS api_method,
-                   a.path   AS api_path
+                   a.path   AS api_path,
+                   g.name   AS generator_name
             FROM tb_case_step s
             LEFT JOIN tb_api_definition a ON s.api_id = a.id AND a.deleted = 0
+            LEFT JOIN tb_data_generator g ON s.generator_id = g.id AND g.deleted = 0
             WHERE s.deleted = 0
               AND s.case_id = #{caseId}
             ORDER BY FIELD(s.phase, 'pre', 'main', 'post'), s.sort_order ASC

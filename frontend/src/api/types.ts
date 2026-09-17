@@ -282,7 +282,7 @@ export interface CaseStepInfo {
   apiId: number
   /** 步骤阶段：pre-前置 / main-主步骤 / post-后置 */
   phase?: string
-  /** 步骤类型：1-单接口 2-组合组件 3-其他类型 */
+  /** 步骤类型：1-单接口 2-组合组件 3-生成变量 */
   stepType?: number
   /** 组合组件ID（stepType=2 时引用） */
   componentId?: number
@@ -330,8 +330,8 @@ export interface StepParams {
   generatorId?: number
   /** 生成变量步骤的输出变量名（供后续步骤 ${varName} 引用） */
   variableName?: string
-  /** 生成变量步骤：每次执行是否重新生成（false 则整个执行固定同一值） */
-  regenEachRun?: boolean
+  /** 生成变量步骤：每次执行是否重新生成，1-是 0-否 */
+  regenEachRun?: number
 }
 
 /** 组合组件出参（含子步骤） */
@@ -355,6 +355,14 @@ export interface ComponentStepInfo {
   apiId?: number | null
   /** 嵌套组件ID（stepType=2 时引用；后端经 CaseStepVO.componentId 透传） */
   componentId?: number | null
+  /** 生成变量步骤（stepType=3）：关联的数据生成器 */
+  generatorId?: number | null
+  /** 生成变量步骤关联生成器名称（展示用） */
+  generatorName?: string | null
+  /** 生成变量步骤的输出变量名（stepType=3） */
+  variableName?: string | null
+  /** 生成变量步骤：每次执行是否重新生成，1-是 0-否 */
+  regenEachRun?: number
   sortOrder: number
   stepName: string | null
   requestOverride: string | null

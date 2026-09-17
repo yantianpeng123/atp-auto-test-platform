@@ -15,11 +15,20 @@ public class StepDTO {
     /** 步骤阶段：pre-前置 / main-主步骤 / post-后置，默认 main */
     private String phase;
 
-    /** 步骤类型：1-单接口 2-组合组件 3-其他类型，默认 1 */
+    /** 步骤类型：1-单接口 2-组合组件 3-生成变量，默认 1 */
     private Integer stepType;
 
     /** 组合组件ID（stepType=2 时引用） */
     private Long componentId;
+
+    /** 数据生成器ID（stepType=3 时必填） */
+    private Long generatorId;
+
+    /** 生成值写入的变量名（stepType=3 时必填） */
+    private String variableName;
+
+    /** 每轮是否重新生成值：0-否 1-是（stepType=3，默认 1） */
+    private Integer regenEachRun;
 
     /** 执行顺序，从 1 开始 */
     private Integer sortOrder;
