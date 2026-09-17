@@ -356,6 +356,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ### 9.1 待修复缺陷
 | 优先级 | 问题 | 位置 |
 | --- | --- | --- |
+| **紧急** | **`stepType=3`（生成变量）后端无支撑，存在静默数据丢失**：①`tb_case_step`/`tb_api_component_step` 无 `generator_id`/`variable_name`/`regen_each_run` 列，实体 `CaseStep`/`ApiComponentStep` 也无对应字段 → 前端保存的生成器配置**不落库、刷新即丢**；②`ExecuteServiceImpl.expandOne()` 仅对 `stepType==2` 分支处理，3 会落到「普通单接口步骤」分支，而此时 `apiId` 为 null → 执行期必然报错。当前前端已放开该入口，属于"已交付但不可用的功能" | `backend/.../execute/ExecuteServiceImpl.java:330`、`entity/CaseStep.java`、`db/schema.sql` |
 | 高 | `DatasetFormDialog` 的 watch 先 `await loadCaseOptions()` 再给 form 赋值；请求挂起时**表单完全不回显** | `views/dataset/components/DatasetFormDialog.vue` |
 | 高 | 编辑弹窗的「关联用例」依赖 `projectStore.currentProject`；数据源管理页无工程上下文，且用例可能属于其他工程 → 下拉为空、只显示裸 `caseId` | 同上 |
 | 中 | `DatasetItemsDialog.loadItems()` 无 `catch`，接口失败静默变空表、无任何提示 | `views/dataset/components/DatasetItemsDialog.vue` |
@@ -407,10 +408,28 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 十一、下一步建议（按优先级）
 
-1. **数据生成器后端落地（前端已完成）**：按 `docs/data-generator-and-expression-design.md` §3 落地后端——新增 `tb_data_generator` 表 + CRUD（§3.3/§3.5）、`GeneratorEngine` 表达式解析器 + 函数注册表（§3.1/§3.2）、`step_type=3` 执行分支（§3.4）；并将 `src/api/generator.ts` 的 mock 函数替换为对后端接口的 HTTP 调用（签名保持不变）。优先级最高的「阶段 1」`GeneratorEngine` + `/preview` 接口可在**零前端改动**下让 `${randomInt(8)}` / `${phone()}` 等直接在参数中生效。
-2. **批次执行异步化**：`executeBatch` 改为"立即返回 runId + 后台线程执行"，避免长批次 HTTP 超时。
-3. **修复数据源弹窗缺陷**（第九节 9.1 高优先级两项）。
-4. **用例列表页补「执行」入口**，并支持选择环境。
-5. **图表看板 / 通知 / CI 集成 / 项目级 RBAC / 并发执行**（长期规划）。
+> 排序依据：**已暴露的风险 > 阻塞日常操作的缺陷 > 体验补齐 > 长期规划**。
+> 更新于 2026-09-17，依据对后端代码与 `schema.sql` 的实测核对。
 
-> 报告中心后端接口已于 2026-09-14 补齐，原下一步第 1 项已完成并移除。
+### P0 · 数据生成器后端闭环（最高，且已被前端"提前放开"）
+现状：前端 `stepType=3` 入口已全量可用，但后端**无表、无字段、无执行分支**（见 §9.1 紧急项），用户配置的生成器**保存即丢、执行必报错**。这不是"新功能"，是**已交付功能不可用**，应最先修。
+
+建议拆为 3 个可独立上线的阶段，按此顺序做：
+1. **阶段 1（收益最高、零前端改动）**：`GeneratorEngine` 表达式解析器 + 函数注册表 + `POST /api/base/generator/preview`。落地后参数里可直接写 `${phone()}` / `${randomInt(8)}`，**无需等建表**。
+2. **阶段 2**：建 `tb_data_generator` 表（自增主键、`deleted` 逻辑删除）+ CRUD + `/functions` 接口；随后把 `src/api/generator.ts` 的 mock 函数体替换为真实 HTTP 调用（**签名不变，前端零重构**）。
+3. **阶段 3**：给 `tb_case_step` / `tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体，再在 `ExecuteServiceImpl.expandOne()` 增加 `stepType==3` 分支（生成值写入变量池，`regenEachRun` 控制每轮是否重算）。
+
+详细设计见 `docs/data-generator-and-expression-design.md` §3。
+
+### P1 · 已知高优缺陷
+4. **修复数据源弹窗缺陷**（§9.1 高优先级两项：表单不回显、关联用例下拉为空）。
+5. **批次执行异步化**：`PlanBatchServiceImpl.executeBatch`（约 198 行）当前**全同步、无线程池**（已实测确认），长批次必然 HTTP 超时 → 改为"立即返回 runId + 后台执行 + 前端轮询"（前端轮询机制在批次详情页已有，可直接复用）。
+
+### P2 · 体验补齐
+6. **用例列表页补「执行」入口**并支持选环境（当前调试只能进编辑页，路径过深）。
+7. **报告页失败重试精度**：当前降级为整用例重跑，需执行引擎支持单步重跑。
+
+### P3 · 长期规划
+8. **图表看板 / 通知 / CI 集成 / 项目级 RBAC / 并发执行**。建议等 P0 落地后再排——看板依赖执行数据，生成器能力缺失时数据维度不完整。
+
+> 报告中心后端接口已于 2026-09-14 补齐并移除出本列表。
