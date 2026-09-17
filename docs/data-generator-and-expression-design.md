@@ -251,7 +251,7 @@ CREATE TABLE `tb_data_generator` (
 | 隐藏路由 `/base/generator` 与 `generatorSelect` store | 🗑️ 已移除 | 原隐藏路由已从 `router/index.ts` 删除；跨页回传 store `stores/generatorSelect.ts` 已删除（卡片直弹窗后不再需要） |
 | 后端 `tb_data_generator` 表 + CRUD | ✅ 已完成 | 阶段2（`bdb1700`），接口契约见 §3.3 / §3.5 |
 | 后端 `GeneratorEngine` + 函数注册表 + `/preview` | ✅ 已完成 | 阶段1（`8896158` / `6c77c27`），见 §3.1 / §3.2 |
-| 后端 `step_type=3` 执行分支（写变量池；regenEachRun 跨轮语义暂未实现） | ✅ 已完成 | 阶段3（`28d1d19`），见 §3.4；`regen_each_run` 列已落库，跨轮固定值语义按需求暂未实现（变量池每轮重建即每轮重算） |
+| 后端 `step_type=3` 执行分支（写变量池；regenEachRun 跨轮语义暂未实现） | ✅ 已完成 | 阶段3（`92806f0`），见 §3.4；`regen_each_run` 列已落库，跨轮固定值语义按需求暂未实现（变量池每轮重建即每轮重算） |
 
 > **交互约定（2026-09-16 调整，2026-09-17 后端已落地）**：生成器管理不再作为独立隐藏路由，而是并入「组合组件」模块的「数据生成器」页签；组合组件编辑器内点击「生成变量」卡片直接弹出（新建 / 选择已有）弹窗，写入 `stepType=3` 步骤。前端 `src/api/generator.ts` 的内存 mock 已于阶段2替换为真实 HTTP 调用（签名不变），后端 `tb_data_generator` 表 + `GeneratorEngine` + `step_type=3` 执行分支已于 09-17 三阶段全部落地，功能已完整闭环。
 

@@ -3,7 +3,7 @@
 > 更新时间：2026-09-17（本轮：数据生成器后端闭环 阶段1+2+3 全部落地）
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
-> 当前 HEAD：`28d1d19`，与 `origin/main` 同步，工作区干净
+> 当前 HEAD：`92806f0`，与 `origin/main` 同步，工作区干净
 
 ---
 
@@ -92,7 +92,7 @@
 | 1 | 阶段1：`GeneratorEngine` 表达式解析器 + 9 函数注册表 + `/preview` + `/functions`，接线 `VariableResolver` | 新增 | `8896158` | ✅ |
 | 2 | 阶段1 隐患修复：`idCard` 非法字符 / `randomInt` 溢出 / 漏括号静默吞 / 契约对齐 / `ThreadLocalRandom` 注释 | 缺陷 | `6c77c27` | ✅ |
 | 3 | 阶段2：`tb_data_generator` 建表 + CRUD + `/functions`；`src/api/generator.ts` mock 全部换真实 HTTP，列表「示例值」改走 `/preview` | 新增 | `bdb1700` | ✅ |
-| 4 | 阶段3：`tb_case_step`/`tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；`ExecuteServiceImpl` 增 `stepType==3` 分支（生成值写入变量池）；保存链路对 `stepType=3` 做校验（不再因 apiId 空报"请选择步骤关联接口"） | 新增 | `28d1d19` | ✅ |
+| 4 | 阶段3：`tb_case_step`/`tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；`ExecuteServiceImpl` 增 `stepType==3` 分支（生成值写入变量池）；保存链路对 `stepType=3` 做校验（不再因 apiId 空报"请选择步骤关联接口"） | 新增 | `92806f0` | ✅ |
 
 ### 4.1 已完成模块
 
