@@ -99,7 +99,7 @@
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
-| 数据生成器（前端） | ⬜ | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
+| 数据生成器（**阶段 1 已落地**） | 部分 | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
 
 ### 4.2 尚未实现
 
@@ -403,6 +403,8 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 7. **Vue 模板 `@click` 传参陷阱（2026-09-16 踩坑）**：`@click="fn"`（不带括号）时，Vue 会把原生 `MouseEvent` 作为**第一个实参**传入。凡 handler 声明了参数（如 `fn(uid?: number)`），模板必须写 `@click="fn()"`；更稳妥的是在函数首行做类型归一化（`typeof uid === 'number' ? uid : null`）。否则会产生「无报错、无变化」的静默失败，静态读码极难发现。排查正则：`@(click|change|input)="[A-Za-z_$][A-Za-z0-9_$]*"`，命中后**逐个确认该 handler 是否声明了参数**（同名无参函数是无害的）。
 8. **前端 Bug 运行时定位**：静态读码查不出时，用 `playwright-core` + 系统 Chrome（`channel:'chrome'`，免下载 ~500MB Chromium）驱动真实应用并 dump Vue `setupState`。账号 `admin/admin123`；**接口数据在项目 3、模块 "3mm"**（项目 1 为 0 条接口，选错模块会误判为"列表为空"）。详见 §9.3。
 9. **开发协作**：本人（开发者）在工作过程中手动编辑过的代码，后续接手者请勿擅自改动；需调整时先沟通确认。
+10. **本地 HTTP 验证用 Node，不要用 curl**：沙箱的透明代理会把对 `127.0.0.1` 的请求拦截成 `AUTH_REQUIRED`，`curl --noproxy '*'` 与清除 `HTTP_PROXY` 环境变量**均无效**。Node 的 `http.request` / `fetch` 不读代理环境变量，可正常直连。另：`mvn spring-boot:run` 默认起在 8080，被占用时用 `-Dspring-boot.run.arguments=--server.port=8088` 指定。
+11. **生成函数必须写成调用形式**：用例里要写 `${phone()}`，不能写 `${phone}`——后者会被 `VariableResolver` 当作未知变量替换成空串。当前实现在"变量不存在且名字是已注册函数"时抛明确报错，不会静默变空。
 
 ---
 
@@ -415,7 +417,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 现状：前端 `stepType=3` 入口已全量可用，但后端**无表、无字段、无执行分支**（见 §9.1 紧急项），用户配置的生成器**保存即丢、执行必报错**。这不是"新功能"，是**已交付功能不可用**，应最先修。
 
 建议拆为 3 个可独立上线的阶段，按此顺序做：
-1. **阶段 1（收益最高、零前端改动）**：`GeneratorEngine` 表达式解析器 + 函数注册表 + `POST /api/base/generator/preview`。落地后参数里可直接写 `${phone()}` / `${randomInt(8)}`，**无需等建表**。
+1. **阶段 1（收益最高、零前端改动）** —— ✅ **已完成（2026-09-17）**：`GeneratorEngine` 表达式解析器 + 函数注册表 + `POST /api/base/generator/preview` + `GET /functions`。落地后参数里可直接写 `${phone()}` / `${randomInt(8)}`，**无需等建表**。9 个白名单函数：`randomInt` `randomFloat` `randomString` `uuid` `phone` `idCard` `name` `enum` `timestamp`。成果：`module/base/generator/GeneratorEngine.java`、`GeneratorFunc.java`、`module/base/controller/GeneratorController.java`；接线点 `VariableResolver.resolve()`（变量替换后追加一遍生成器解析）。
 2. **阶段 2**：建 `tb_data_generator` 表（自增主键、`deleted` 逻辑删除）+ CRUD + `/functions` 接口；随后把 `src/api/generator.ts` 的 mock 函数体替换为真实 HTTP 调用（**签名不变，前端零重构**）。
 3. **阶段 3**：给 `tb_case_step` / `tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体，再在 `ExecuteServiceImpl.expandOne()` 增加 `stepType==3` 分支（生成值写入变量池，`regenEachRun` 控制每轮是否重算）。
 
