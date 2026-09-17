@@ -1,6 +1,9 @@
 package com.atp.module.execute.core;
 
 import cn.hutool.json.JSONUtil;
+import com.atp.common.exception.BizException;
+import com.atp.common.result.ResultCode;
+import com.atp.module.base.generator.GeneratorEngine;
 import com.jayway.jsonpath.JsonPath;
 
 import java.util.Map;
@@ -30,6 +33,14 @@ public class VariableResolver {
 
     /**
      * 替换字符串中所有 ${...} 占位符。
+     *
+     * <p>两遍解析：
+     * <ol>
+     *   <li>第一遍：把 {@code ${varName}} / {@code ${varName.path}} 换成变量池当前值；</li>
+     *   <li>第二遍：把 {@code ${func(args)}} 交给 {@link GeneratorEngine} 现生成
+     *       （如 {@code ${phone()}}、{@code ${randomInt(1000,9999)}}）。</li>
+     * </ol>
+     * 本类的正则只匹配 {@code ${var}}，不会命中带括号的 {@code ${func()}}，两遍互不干扰。
      */
     public String resolve(String input) {
         if (input == null || input.isEmpty()) {
@@ -39,7 +50,8 @@ public class VariableResolver {
         for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Matcher matcher = PATTERN.matcher(result);
             if (!matcher.find()) {
-                return result;
+                // 变量已替换完毕，再跑一遍生成函数
+                return GeneratorEngine.parse(result);
             }
             matcher.reset();
             StringBuilder sb = new StringBuilder();
@@ -51,7 +63,7 @@ public class VariableResolver {
             matcher.appendTail(sb);
             result = sb.toString();
         }
-        return result;
+        return GeneratorEngine.parse(result);
     }
 
     /**
@@ -64,6 +76,13 @@ public class VariableResolver {
 
         Object value = variables.get(varName);
         if (value == null) {
+            // 变量不存在，且名字正好是某个生成函数 —— 几乎可以肯定是漏写了括号：
+            // ${timestamp} 会被当未知变量替换成空字符串，而真正想要的是 ${timestamp()}。
+            // 这条路径原本就只会静默返回空串，抛错不影响任何正常行为。
+            if (path == null && GeneratorEngine.isFunction(varName)) {
+                throw new BizException(ResultCode.BAD_REQUEST, "生成函数必须写成调用形式：${" + varName
+                        + "()}，可用函数见 /api/base/generator/functions");
+            }
             return "";
         }
         if (path == null || path.isEmpty()) {
