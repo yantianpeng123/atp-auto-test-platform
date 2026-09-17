@@ -505,3 +505,21 @@ CREATE TABLE `tb_plan_batch_run_item`
     KEY `idx_run` (`run_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='批次运行明细表';
+
+DROP TABLE IF EXISTS `tb_data_generator`;
+CREATE TABLE `tb_data_generator`
+(
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `project_id`  BIGINT       NOT NULL COMMENT '项目隔离',
+    `name`        VARCHAR(100) NOT NULL COMMENT '生成器名称',
+    `type`        VARCHAR(20)  NOT NULL COMMENT 'RANDOM/PHONE/IDCARD/NAME/ENUM/TIMESTAMP/UUID/CUSTOM',
+    `params`      JSON         DEFAULT NULL COMMENT '结构化参数(随type)或CUSTOM的template',
+    `description` VARCHAR(500) DEFAULT NULL COMMENT '说明',
+    `create_by`   VARCHAR(50)  DEFAULT NULL COMMENT '创建人',
+    `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    `update_time` DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`     TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-有效 1-已删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_project` (`project_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='数据生成器表';

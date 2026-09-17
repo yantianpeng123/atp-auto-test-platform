@@ -4,10 +4,13 @@ import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 生成表达式解析器（手写，不使用任何脚本引擎）。
@@ -28,6 +31,16 @@ public final class GeneratorEngine {
 
     private static final int MAX_DEPTH = 10;
 
+    /**
+     * 支持的生成器类型：生成器表 {@code type} 字段与 {@code /preview} 的取值白名单。
+     *
+     * <p>本集合是唯一真源——{@link #generate}、数据生成器 Service 的类型校验都读它。
+     * 新增类型时改这一处 + {@link #generate} 的 switch 分支即可。
+     * 用 LinkedHashSet 是为了让错误提示里的类型顺序稳定。
+     */
+    private static final Set<String> SUPPORTED_TYPES = Collections.unmodifiableSet(new LinkedHashSet<>(
+            List.of("RANDOM", "PHONE", "IDCARD", "NAME", "ENUM", "TIMESTAMP", "UUID", "CUSTOM")));
+
     private static final Map<String, GeneratorFunc> REGISTRY = new LinkedHashMap<>();
 
     static {
@@ -42,6 +55,11 @@ public final class GeneratorEngine {
     /** 白名单函数清单，供 {@code /functions} 接口返回给前端做语法提示 */
     public static List<GeneratorFunc> functions() {
         return List.copyOf(REGISTRY.values());
+    }
+
+    /** 支持的生成器类型（白名单，顺序稳定） */
+    public static Set<String> supportedTypes() {
+        return SUPPORTED_TYPES;
     }
 
     /**
@@ -74,6 +92,10 @@ public final class GeneratorEngine {
      */
     public static String generate(String type, Map<String, Object> params) {
         String t = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
+        if (!SUPPORTED_TYPES.contains(t)) {
+            throw new BizException(ResultCode.BAD_REQUEST,
+                    "不支持的生成器类型：" + type + "，可用类型：" + String.join("、", SUPPORTED_TYPES));
+        }
         Map<String, Object> p = params == null ? Map.of() : params;
         String expr;
         switch (t) {

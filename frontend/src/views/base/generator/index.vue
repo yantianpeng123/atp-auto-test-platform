@@ -44,7 +44,7 @@
         </el-table-column>
         <el-table-column label="示例值" min-width="160">
           <template #default="{ row }">
-            <code class="sample">{{ samples[row.id] ?? sampleOf(row) }}</code>
+            <code class="sample">{{ samples[row.id] ?? '—' }}</code>
             <el-button size="small" link type="primary" @click="refreshSample(row)">换一个</el-button>
           </template>
         </el-table-column>
@@ -90,7 +90,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteGenerator, genValue, getGeneratorList } from '@/api/generator'
+import { deleteGenerator, getGeneratorList, previewGenerator } from '@/api/generator'
 import type { DataGeneratorInfo, GeneratorType } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
 import GeneratorFormDialog from './GeneratorFormDialog.vue'
@@ -138,11 +138,21 @@ const query = reactive<{ name: string; type: GeneratorType | ''; page: number; s
 
 const samples = reactive<Record<number, string>>({})
 
-function sampleOf(g: DataGeneratorInfo): string {
-  return genValue(g.type, g.params ?? {})
+/** 示例值一律向后端试生成，保证与用例执行时的真实结果同源 */
+async function sampleOf(g: DataGeneratorInfo): Promise<string> {
+  try {
+    const res = await previewGenerator({
+      projectId: projectId.value,
+      type: g.type,
+      params: g.params ?? {}
+    })
+    return res.result
+  } catch {
+    return '—'
+  }
 }
-function refreshSample(g: DataGeneratorInfo) {
-  samples[g.id] = sampleOf(g)
+async function refreshSample(g: DataGeneratorInfo) {
+  samples[g.id] = await sampleOf(g)
 }
 
 function paramsSummary(g: DataGeneratorInfo): string {
@@ -183,9 +193,13 @@ async function loadList() {
     })
     records.value = res.records
     total.value = res.total
-    res.records.forEach((g) => {
-      if (samples[g.id] === undefined) samples[g.id] = sampleOf(g)
-    })
+    await Promise.all(
+      res.records
+        .filter((g) => samples[g.id] === undefined)
+        .map(async (g) => {
+          samples[g.id] = await sampleOf(g)
+        })
+    )
   } catch {
     records.value = []
   } finally {

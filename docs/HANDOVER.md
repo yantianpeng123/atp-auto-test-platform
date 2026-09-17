@@ -99,7 +99,7 @@
 | 定时任务批次 | ✅ | ✅ | 批次 CRUD、关联多计划、批次级 Cron 轮询调度、并行/串行策略、立即执行 |
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
-| 数据生成器（**阶段 1 已落地**） | 部分 | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
+| 数据生成器（**阶段 1+2 已落地**） | 部分 | ✅ | 前端全链路已实现：生成器管理并入「接口组件」页的「数据生成器」页签（`component/index.vue` 用 `el-tabs` 嵌入改造后的 `generator/index.vue`）；新增 `GeneratorSelectDialog.vue` 选择已有生成器；组合组件「生成变量」卡片直接弹出（新建 `GeneratorFormDialog` / 选择已有）写入 `stepType=3` 步骤；客户端生成运行时 `api/generator.ts`（mock，含 GB11643 身份证校验）；用例扩展「生成变量（stepType=3）」接入、表格「生成变量」标签均已落地；已移除隐藏路由 `/base/generator` 与跨页回传 store。已用真实浏览器（admin/admin123，项目 3 模块 "3mm"）跑通「新增组件 → 选模块 → 添加步骤 → 选接口 → 确定」全链路。**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` + `step_type=3` 执行分支待实现**（详见 `docs/data-generator-and-expression-design.md` §9） |
 
 ### 4.2 尚未实现
 
@@ -418,7 +418,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 建议拆为 3 个可独立上线的阶段，按此顺序做：
 1. **阶段 1（收益最高、零前端改动）** —— ✅ **已完成（2026-09-17）**：`GeneratorEngine` 表达式解析器 + 函数注册表 + `POST /api/base/generator/preview` + `GET /functions`。落地后参数里可直接写 `${phone()}` / `${randomInt(8)}`，**无需等建表**。9 个白名单函数：`randomInt` `randomFloat` `randomString` `uuid` `phone` `idCard` `name` `enum` `timestamp`。成果：`module/base/generator/GeneratorEngine.java`、`GeneratorFunc.java`、`module/base/controller/GeneratorController.java`；接线点 `VariableResolver.resolve()`（变量替换后追加一遍生成器解析）。
-2. **阶段 2**：建 `tb_data_generator` 表（自增主键、`deleted` 逻辑删除）+ CRUD + `/functions` 接口；随后把 `src/api/generator.ts` 的 mock 函数体替换为真实 HTTP 调用（**签名不变，前端零重构**）。
+2. **阶段 2** —— ✅ **已完成（2026-09-17）**：建 `tb_data_generator`（`params` 为 JSON 列）+ CRUD + `/functions`；`src/api/generator.ts` 的 mock 已全部替换为真实 HTTP 调用（签名不变），客户端生成运行时 `genValue`/`genFromTemplate` 与 `mockStore` 已删除——**列表里的「示例值」改走 `/preview`，与用例执行时的真实生成结果同源**。新增同名校验与类型白名单校验（`GeneratorEngine.supportedTypes()` 为唯一真源）。
 3. **阶段 3**：给 `tb_case_step` / `tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体，再在 `ExecuteServiceImpl.expandOne()` 增加 `stepType==3` 分支（生成值写入变量池，`regenEachRun` 控制每轮是否重算）。
 
 详细设计见 `docs/data-generator-and-expression-design.md` §3。
