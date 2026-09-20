@@ -93,7 +93,7 @@ CREATE TABLE tb_project_member (
 ### 3.1 数据模型（新增）
 ```sql
 CREATE TABLE tb_notify_channel (
-  id, project_id, type VARCHAR(20) COMMENT 'INAPP/EMAIL/WEBHOOK',
+  id, project_id, type VARCHAR(20) COMMENT 'INAPP/DINGTALK/EMAIL_163',
   name, config JSON, enabled TINYINT, deleted, create_time
 );
 CREATE TABLE tb_notify_rule (
@@ -104,15 +104,45 @@ CREATE TABLE tb_notify_log (
   id, project_id, rule_id, channel_id, event, status, content, error, create_time
 );
 CREATE TABLE tb_notify_message (   -- 站内信收件箱
-  id, user_id, title, content, read TINYINT, create_time
+  id, user_id, project_id, title, content, read TINYINT, link_url VARCHAR(255), create_time
 );
 ```
 
+> **渠道 `config` JSON 结构（2026-09-20 锁定选型：Webhook=钉钉，邮件=163）**
+> - `type=INAPP`：无需 config，直接写库给项目内可接收角色成员。
+> - `type=DINGTALK`（钉钉群机器人 webhook）：
+>   ```json
+>   {
+>     "platform": "DINGTALK",
+>     "webhook": "https://oapi.dingtalk.com/robot/send?access_token=xxxxx",
+>     "secret": "SECxxxx（加签密钥，可空=不加签）",
+>     "atMobiles": ["13800138000"],
+>     "msgtype": "markdown"
+>   }
+>   ```
+>   发送器 `DingTalkSender` 拼装钉钉报文 `{"msgtype":"markdown","markdown":{"title":...,"text":...},"at":{"atMobiles":[...]}}`；加签 = `HMAC-SHA256(timestamp+"\n"+secret)` Base64 后拼 `&timestamp=&sign=`。单机器人限频 20 条/分钟。
+> - `type=EMAIL_163`（网易 163 邮箱 SMTP）：
+>   ```json
+>   {
+>     "platform": "EMAIL_163",
+>     "host": "smtp.163.com",
+>     "port": 465,
+>     "username": "xxx@163.com",
+>     "authCode": "XXXX（授权码，非登录密码）",
+>     "from": "xxx@163.com",
+>     "ssl": true
+>   }
+>   ```
+>   发送器 `Mail163Sender` 用 `JavaMailSender`：`mail.smtp.auth=true`、`mail.smtp.ssl.enable=true`、端口 465；`from` 须与认证账号一致。仅适合开发联调/小团队，生产建议换阿里云邮件推送。`config.platform` 字段为以后扩展企业微信/飞书留口。
+
 ### 3.2 后端
-- `NotifyService.dispatch(event, payload)`：命中 rule → 逐 channel 发送 → 写 `tb_notify_log`；`INAPP` 写 `tb_notify_message` 给"项目中可接收角色的成员"。
-- 事件源：执行完成钩子（`executeCase` / 批次 run 完成后）`ApplicationEventPublisher.publishEvent(...)`，配合 `@Async` 异步派发。
-- 渠道实现：`EMAIL`→`JavaMailSender`；`WEBHOOK`→`RestTemplate` POST JSON（企业微信/钉钉/飞书）；`INAPP`→直接写库。
-- 顶栏消息中心：`GET /api/notify/messages?unread=1` 轮询；未读角标。
+- `NotifyService.dispatch(event, payload)`：按 `project_id + event + enabled` 命中规则 → 逐 `channel_ids` 发送 → 每渠道写 `tb_notify_log`（失败记 error，重试 1 次，避免静默丢失）。
+- 事件源：执行完成钩子（`executeCase` 单接口落库后 / 批次 run 完成 `run.setStatus` 后）`ApplicationEventPublisher.publishEvent(new NotifyEvent(...))`，配合 `@Async` 监听器异步派发，主流程零阻塞。
+- 渠道实现（两发送器 + 站内信）：
+  - `DingTalkSender`：钉钉群机器人 webhook（`RestTemplate` POST），支持加签与 @手机号，markdown 报文。
+  - `Mail163Sender`：`JavaMailSender` + 163 SMTP（授权码鉴权、SSL 465）。
+  - `INAPP`：直接写 `tb_notify_message` 给项目内 `OWNER/MAINTAINER/DEVELOPER`（按 `tb_project_member` 取成员）。
+- 顶栏消息中心：`GET /api/notify/messages?unread=1` 轮询；`GET /api/notify/unread-count` 返回未读角标。
 
 ### 3.3 前端
 - `/notify/config`（OWNER/MAINTAINER）：渠道卡片（新增/启用/配置）+ 规则表（事件选择 + 渠道多选 + 条件）+ 发送日志。
@@ -156,7 +186,7 @@ CREATE TABLE tb_ci_token (
 ### 后端（module 划分，模块间不横向依赖）
 - RBAC：`controller/ProjectMemberController`、`service/ProjectMemberService`、`interceptor/ProjectAuthInterceptor`、`entity/TbProjectMember`、`mapper/ProjectMemberMapper`、`@RequireProjectRole` 注解 + AOP。
 - 看板：`controller/DashboardController`、`service/DashboardService`（聚合 Mapper 自定义 SQL）。
-- 通知：`controller/NotifyController`、`service/NotifyService` + `channel/*Sender`、`entity/*`、`mapper/*`、`event/ExecutionEvent`。
+- 通知：`controller/NotifyController`、`service/NotifyService` + `channel/DingTalkSender`、`channel/Mail163Sender`、`entity/*`、`mapper/*`、`event/NotifyEvent` + `NotifyEventListener`。
 - CI：`controller/CiController`、`service/CiService`、`interceptor/ProjectTokenAuthInterceptor`、`entity/TbCiToken`、`mapper/*`。
 
 ### 前端（新增路由 + 页面 + api）
