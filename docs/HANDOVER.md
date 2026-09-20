@@ -1,9 +1,9 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-17（本轮：数据生成器后端闭环 阶段1+2+3 全部落地）
+> 更新时间：2026-09-20（本轮：项目级 RBAC 成员管理 + 项目列表可见性修复，已推送 origin/main）
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
-> 当前 HEAD：`92806f0`，与 `origin/main` 同步，工作区干净
+> 当前 HEAD：`e7c80a1`，已推送至 `origin/main`，工作区干净
 
 ---
 
@@ -65,7 +65,7 @@
 | 第二阶段 | 基础数据（工程/版本/模块）+ 接口定义 | ✅ 完成 |
 | 第三阶段 | **用例管理 + 步骤编排 + 执行引擎 + 数据源 + 测试计划** | ✅ 完成 |
 | 第四阶段 | 定时任务批次、**报告中心（前后端）**、图表看板、通知 | ✅ 批次/报告前后端完成；图表看板/通知未开始 |
-| 第五阶段 | CI 集成、项目级 RBAC、并发执行 | ⬜ 未开始 |
+| 第五阶段 | CI 集成、项目级 RBAC、并发执行 | 🟡 RBAC 已完成；CI / 并发未开始 |
 
 ### 4.0 本轮进度快照（2026-09-16）
 
@@ -94,12 +94,31 @@
 | 3 | 阶段2：`tb_data_generator` 建表 + CRUD + `/functions`；`src/api/generator.ts` mock 全部换真实 HTTP，列表「示例值」改走 `/preview` | 新增 | `bdb1700` | ✅ |
 | 4 | 阶段3：`tb_case_step`/`tb_api_component_step` 补 `generator_id`/`variable_name`/`regen_each_run` 三列并同步实体/VO/Mapper/DTO；`ExecuteServiceImpl` 增 `stepType==3` 分支（生成值写入变量池）；保存链路对 `stepType=3` 做校验（不再因 apiId 空报"请选择步骤关联接口"） | 新增 | `92806f0` | ✅ |
 
+### 4.0.2 项目级 RBAC + 列表可见性修复（2026-09-20，commit `e7c80a1`）
+
+本轮（commit `92806f0` → `e7c80a1`，与先前"先不提交"累积的 RBAC 前端/后端/设计稿统一入库）补齐**项目级成员管理体系**并修复**项目列表可见性**，全部基于设计稿 `docs/phase5-features-design.md`：
+
+| # | 事项 | 类型 | 文件 / 端点 | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | `tb_project_member` 表 + `ProjectRole` 枚举（OWNER>MAINTAINER>DEVELOPER>VIEWER，`isAtLeast/require`） | 新增 | `db/schema.sql`、`module/project/enums/ProjectRole.java` | ✅ |
+| 2 | `ProjectMember` 实体、`ProjectMemberMapper`（含 `selectByProjectAndUser` 绕过 @TableLogic）、`dto/AddMemberRequest`、`dto/UpdateMemberRoleRequest`、`vo/ProjectMemberVO` | 新增 | `module/project/**` | ✅ |
+| 3 | `ProjectMemberService` 成员 CRUD 5 接口（/my-role、/members、/member、/member/role、/member/{id}），服务端兜底"至少保留 1 名 OWNER"；直接注入 `ProjectMapper/UserMapper` 避免与 `ProjectService` 循环依赖 | 新增 | `module/project/controller/ProjectController.java`（均在 `/api/project` 下） | ✅ |
+| 4 | `ProjectServiceImpl.createProject` 保存后自动 `addOwner(projectId, userId)`，保证新项目必有 OWNER | 新增 | `module/project/service/impl/ProjectServiceImpl.java` | ✅ |
+| 5 | **修复 `/api/project/list` 未关联成员表**：`ProjectMapper.listVisibleByUser` 用 `LEFT JOIN tb_project_member`（`pm.deleted=0 AND pm.user_id=#{userId}`，`WHERE p.deleted=0 AND (pm.id IS NOT NULL OR p.owner_id=#{userId})`，`DISTINCT`），一次性查出当前用户可见项目；原生 SQL 手动加 `deleted` 过滤（绕过 @TableLogic） | 修复 | `module/project/mapper/ProjectMapper.java`、`ProjectServiceImpl.listProjects` | ✅ |
+| 6 | `UserController` 新增 `GET /api/user/list`（返回 username/nickname，不含密码），供"添加成员"用户下拉 | 新增 | `module/user/controller/UserController.java` | ✅ |
+| 7 | `sys_user` 主键改自增：`User.java` `IdType.ASSIGN_ID` → `IdType.AUTO` + `schema.sql` `AUTO_INCREMENT` | 改动 | `module/user/entity/User.java`、`db/schema.sql` | ✅ |
+| 8 | 前端：成员管理**合并进 info.vue**（删除 members.vue），侧边栏「成员管理」菜单项移除、降级为单个「项目信息」；新增 `v-role` 指令、`api/projectMember`、`api/user`、`stores.currentProjectRole/loadMyRole/canManageProject`；"新增项目"入口保留在 `select.vue`（仅 ADMIN 可见） | 重构 | `frontend/src/views/project/info.vue`、`layout/BasicLayout.vue`、`directives/role.ts`、`api/projectMember.ts`、`api/user.ts`、`stores/project.ts`、`main.ts`、`router/index.ts` | ✅ |
+| 9 | 设计文档 `docs/phase5-features-design.md`（图表看板/通知/CI/RBAC 思路 + UI + 入口决策） | 文档 | — | ✅ |
+
+**一句话结论**：项目级 RBAC 已完成基本闭环——任意项目可添加 OWNER/MAINTAINER/DEVELOPER/VIEWER 成员，成员登录后可在 `/api/project/list` 看到被授权的项目（修复前非 owner 本人看不到），管理员仍见全部。下一步可选做图表看板/通知/CI（设计稿已就绪）。
+
 ### 4.1 已完成模块
 
 | 模块 | 后端 | 前端 | 说明 |
 | --- | --- | --- | --- |
 | 用户认证 | ✅ | ✅ | 注册、登录、登出、图形验证码、JWT、角色体系 |
-| 项目管理 | ✅ | ✅ | 项目列表、新增、选择（localStorage 持久化）、切换 |
+| 项目管理 | ✅ | ✅ | 项目列表（含成员可见性 JOIN 修复）、新增（仅 ADMIN）、选择（localStorage 持久化）、切换 |
+| 项目级 RBAC（成员管理） | ✅ | ✅ | 项目成员 CRUD（角色 OWNER>MAINTAINER>DEVELOPER>VIEWER）；`tb_project_member` + `ProjectRole` 枚举；`/api/project/*` 5 接口（my-role/members/member/member.role/member/{id}）；`createProject` 自动 addOwner；前端成员管理合并进 `info.vue`、`v-role` 指令、`GET /api/user/list` 用户下拉、`canManageProject` 守卫 |
 | 基础数据 | ✅ | ✅ | 工程/版本/模块 级联查询与新增；接口列表、手动新增、Jar 包导入 |
 | 环境配置 | ✅ | ✅ | 环境 CRUD（base_url / 全局 header / 数据库配置） |
 | 用例管理 | ✅ | ✅ | 用例 CRUD、状态启停、**多步骤串行编排**、**HAR 导入** |
@@ -116,7 +135,7 @@
 
 - **执行报告"重跑"精度**：报告页"失败重试"当前降级为整用例重跑（调 `executeCase`），精确单步重跑需执行引擎后续支持。
 - **批次执行异步化**：`executeBatch` 当前为同步执行（HTTP 返回即跑完），长批次可能超时，建议改"立即返回 runId + 后台异步"。
-- **图表看板、通知、CI 集成、项目级 RBAC、并发执行** 均未开始。
+- **图表看板、通知、CI 集成、并发执行** 均未开始（项目级 RBAC 已于 2026-09-20 完成）。
 
 前端菜单现状：「组合组件」「测试计划」「定时任务」「报告中心」均已启用（非 disabled）。
 
@@ -141,7 +160,7 @@ security/
   UserPrincipal.java
 module/
   user/       (13)  用户模块
-  project/    (7)   项目模块
+  project/    (7+)  项目模块（含 RBAC 成员管理：enums/ProjectRole、entity/ProjectMember、ProjectMemberMapper、ProjectMemberService、dto/vo）
   base/       (27)  基础数据：工程/版本/模块/接口定义 + JarApiParser
   env/        (8)   环境配置
   testcase/   (19)  用例 + 步骤 + HAR 导入
@@ -156,17 +175,19 @@ module/
 
 ```
 api/      request.ts   # axios 拦截器（token 注入、code 拆包、401 跳登录）
-          auth.ts / user.ts / project.ts / base.ts
+          auth.ts / user.ts（新增 getUserList）/ project.ts / base.ts / projectMember.ts（新增，RBAC 成员管理）
           case.ts / dataset.ts / env.ts / execute.ts
           component.ts / plan.ts / planBatch.ts
           generator.ts  # **数据生成器**：客户端生成运行时（mock，待替换为后端 HTTP 调用）
           types.ts      # 与后端 VO/DTO 对齐的类型
 router/   index.ts     # 路由表 + 登录守卫 + 项目选择守卫
-stores/   user.ts / project.ts / tabs.ts
-layout/   BasicLayout.vue   # 侧边栏 + 顶栏 + 当前项目
+stores/   user.ts / project.ts（新增 currentProjectRole/loadMyRole/canManageProject）/ tabs.ts
+directives/ role.ts         # 全局 v-role 指令（按当前项目角色显隐，全局 ADMIN 恒可见）
+layout/   BasicLayout.vue   # 侧边栏 + 顶栏 + 当前项目（「项目管理」已降级为单个「项目信息」菜单项）
 views/
   login/ register/       登录 / 注册
-  project/select.vue     项目选择
+  project/select.vue     项目选择 / 切换（含「新增项目」入口，仅 ADMIN 可见）
+  project/info.vue      项目信息 **+ 成员管理**（members.vue 已合并删除，RBAC 增删改在此页）
   dashboard/             工作台
   base/version/          工程版本管理
   base/api/              接口列表（含 Jar 导入）
@@ -199,12 +220,13 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 六、数据库设计
 
-### 已建表（22 张）
+### 已建表（23 张）
 
 | 表 | 用途 | 状态 |
 | --- | --- | --- |
-| `sys_user` | 用户 | ✅ 使用中 |
+| `sys_user` | 用户（主键 2026-09-20 改自增） | ✅ 使用中 |
 | `tb_project` | 项目 | ✅ 使用中 |
+| `tb_project_member` | 项目成员（RBAC，唯一键 `(project_id,user_id)`） | ✅ 新增（2026-09-20） |
 | `tb_application` / `tb_application_version` / `tb_application_module` | 工程 / 版本 / 模块 | ✅ 使用中 |
 | `tb_api_definition` | 接口定义 | ✅ 使用中 |
 | `tb_test_case` | 用例 | ✅ 使用中 |
@@ -219,7 +241,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ### 主键约定
 - **新建表一律用 `IdType.AUTO`（自增）+ 表加 `AUTO_INCREMENT`**。
-- 早期表（`sys_user` 等）为雪花 ID；`tb_application*`、`tb_api_definition` 已改为自增。
+- 早期表 `sys_user` 已于 2026-09-20 改为自增（`User.java` `IdType.AUTO` + `schema.sql` `AUTO_INCREMENT`；存量库需执行 `ALTER TABLE sys_user MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT` 并校准 `AUTO_INCREMENT=MAX(id)+1`）；`tb_application*`、`tb_api_definition` 已改为自增。
 - 全局 `id-type: assign_id`，实体上 `@TableId(type=IdType.AUTO)` 优先级更高。
 - `keys` 是 MySQL 保留字，写 SQL 时必须用反引号 `` `keys` ``。
 
@@ -236,12 +258,18 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | GET | `/api/auth/captcha` | 验证码 |
 | GET | `/api/user/info` | 当前用户 |
 | GET | `/api/user/check-username` | 用户名查重 |
+| GET | `/api/user/list` | 用户下拉（username/nickname，不含密码） |
 
 ### 项目
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/project/list` | 我的项目 |
+| GET | `/api/project/list` | 我的项目（已用 LEFT JOIN tb_project_member 修复非 owner 不可见问题） |
 | POST | `/api/project` | 新增项目（仅 ADMIN） |
+| GET | `/api/project/my-role` | 当前用户在某项目的角色（非成员返回 null） |
+| GET | `/api/project/members` | 项目成员列表（仅成员可见） |
+| POST | `/api/project/member` | 添加成员（仅 OWNER/MAINTAINER 或 ADMIN） |
+| PUT | `/api/project/member/role` | 修改成员角色 |
+| DELETE | `/api/project/member/{id}` | 移除成员（至少保留 1 名 OWNER） |
 
 ### 基础数据
 | 方法 | 路径 | 说明 |
@@ -382,7 +410,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 - **数据生成器 + 表达式模板（前端已实现，后端已于 2026-09-17 阶段1/2/3 全部落地）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成：生成器管理并入「组合组件」模块「数据生成器」页签（改造 `generator/index.vue` 内嵌、移除隐藏路由 `/base/generator`）、新增 `GeneratorSelectDialog.vue` 选择已有生成器、组合组件「生成变量」卡片直接弹出（新建/选择已有）写入 `stepType=3` 步骤、客户端运行时 `api/generator.ts` 已接真实 HTTP、用例扩展「生成变量（stepType=3）」接入与表格标签。后端已补齐：`tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式解析器（白名单、禁 eval）+ `step_type=3` 执行分支（生成值写入变量池）+ `VariableResolver` 追加生成器解析遍（`${func(args)}`）。`regen_each_run` 跨轮固定语义按需求暂不实现（变量池每轮重建即每轮重算）。
 - 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
 - 报告页"失败重试"精度（当前整用例重跑降级）。
-- 图表看板、通知、CI 集成、项目级 RBAC、并发执行均未开始。
+- 图表看板、通知、CI 集成、并发执行均未开始（项目级 RBAC 已于 2026-09-20 完成）。
 - 用例列表页无「执行」入口，调试仅能在用例编辑页进行。
 - 数据源弹窗缺陷见 9.1（高优先级两项仍待修）。
 
@@ -422,7 +450,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 ## 十一、下一步建议（按优先级）
 
 > 排序依据：**已暴露的风险 > 阻塞日常操作的缺陷 > 体验补齐 > 长期规划**。
-> 更新于 2026-09-17，依据对后端代码与 `schema.sql` 的实测核对。
+> 更新于 2026-09-20（RBAC 落地后刷新），依据对后端代码与 `schema.sql` 的实测核对。
 
 ### P0 · 数据生成器后端闭环（✅ 已于 2026-09-17 阶段1/2/3 全部完成）
 现状：前端 `stepType=3` 入口早已全量可用，此前后端**无表、无字段、无执行分支**，用户配置的生成器**保存即丢、执行必报错**；该缺口已于 09-17 三阶段全部补齐，功能已可用。
@@ -443,6 +471,6 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 7. **报告页失败重试精度**：当前降级为整用例重跑，需执行引擎支持单步重跑。
 
 ### P3 · 长期规划
-8. **图表看板 / 通知 / CI 集成 / 项目级 RBAC / 并发执行**。建议等 P0 落地后再排——看板依赖执行数据，生成器能力缺失时数据维度不完整。
+8. **图表看板 / 通知 / CI 集成 / 并发执行**。项目级 RBAC（成员管理 CRUD + 可见性修复）已于 2026-09-20 完成（见 §4.0.2），已从本列表移除；看板依赖执行数据，建议优先做看板与通知，设计稿见 `docs/phase5-features-design.md`。
 
 > 报告中心后端接口已于 2026-09-14 补齐并移除出本列表。
