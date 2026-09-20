@@ -48,8 +48,11 @@ import com.atp.module.execute.mapper.ExecutionAssertionMapper;
 import com.atp.module.execute.mapper.ExecutionDetailMapper;
 import com.atp.module.execute.mapper.ExecutionMapper;
 import com.atp.security.UserPrincipal;
+import com.atp.module.notify.event.NotifyEvent;
+import com.atp.module.notify.event.NotifyPayload;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -91,6 +94,8 @@ public class ExecuteServiceImpl implements ExecuteService {
     private final ApiComponentStepMapper componentStepMapper;
     private final ApiComponentMapper apiComponentMapper;
     private final DataGeneratorMapper dataGeneratorMapper;
+
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public CaseExecuteVO executeCase(Long caseId, CaseExecuteRequest request) {
@@ -187,7 +192,8 @@ public class ExecuteServiceImpl implements ExecuteService {
         // ============ 持久化执行记录（头表 + 每轮每步明细 + 断言） ============
         // 调试运行不落库，仅正式「执行」才记录；组合组件调试视为调试，永不落库
         if (!componentDebug && !Boolean.TRUE.equals(request.getDebug())) {
-            persistExecution(caseId, testCase, env, vo, duration, request.getPlanId());
+            Long execId = persistExecution(caseId, testCase, env, vo, duration, request.getPlanId());
+            publishNotifyEvents(testCase.getProjectId(), vo, execId, currentUserId());
         }
 
         return vo;
@@ -532,8 +538,8 @@ public class ExecuteServiceImpl implements ExecuteService {
     // ==================== 执行记录持久化 ====================
 
     /** 将一次执行结果落库：头表 + 每轮每步明细 + 每条断言 */
-    private void persistExecution(Long caseId, TestCase testCase, TestEnv env,
-                                  CaseExecuteVO vo, long duration, Long planId) {
+    private Long persistExecution(Long caseId, TestCase testCase, TestEnv env,
+                                   CaseExecuteVO vo, long duration, Long planId) {
         LocalDateTime start = LocalDateTime.now();
         Execution exec = new Execution();
         exec.setProjectId(testCase.getProjectId());
@@ -607,6 +613,7 @@ public class ExecuteServiceImpl implements ExecuteService {
                 }
             }
         }
+        return exec.getId();
     }
 
     /** 取当前登录用户 ID（无登录上下文时返回 null） */
@@ -620,6 +627,46 @@ public class ExecuteServiceImpl implements ExecuteService {
             // 非 Web 上下文或尚未认证
         }
         return null;
+    }
+
+    // ==================== 执行完成通知事件 ====================
+
+    /**
+     * 执行记录落库后发布通知事件：始终发布 EXEC_DONE，失败时追加 EXEC_FAIL。
+     * 事件在 executeCase 的事务提交后、由 NotifyEventListener 异步派发，主流程零阻塞。
+     */
+    private void publishNotifyEvents(Long projectId, CaseExecuteVO vo, Long executionId, Long executorId) {
+        String linkUrl = "/execution/" + executionId;
+        String executorName = null;
+        if (executorId != null) {
+            User user = userMapper.selectById(executorId);
+            if (user != null) {
+                executorName = user.getUsername();
+            }
+        }
+        eventPublisher.publishEvent(new NotifyEvent(this,
+                buildPayload(projectId, "EXEC_DONE", vo, executionId, executorId, executorName, linkUrl)));
+        if ("FAILED".equals(vo.getStatus())) {
+            eventPublisher.publishEvent(new NotifyEvent(this,
+                    buildPayload(projectId, "EXEC_FAIL", vo, executionId, executorId, executorName, linkUrl)));
+        }
+    }
+
+    private NotifyPayload buildPayload(Long projectId, String event, CaseExecuteVO vo,
+                                      Long executionId, Long executorId, String executorName, String linkUrl) {
+        NotifyPayload p = new NotifyPayload();
+        p.setProjectId(projectId);
+        p.setEvent(event);
+        p.setExecutionId(executionId);
+        p.setCaseName(vo.getCaseName());
+        p.setStatus(vo.getStatus());
+        p.setTotalRounds(vo.getTotalRounds());
+        p.setPassedRounds(vo.getPassedRounds());
+        p.setFailedRounds(vo.getFailedRounds());
+        p.setExecutorId(executorId);
+        p.setExecutorName(executorName);
+        p.setLinkUrl(linkUrl);
+        return p;
     }
 
     // ==================== 历史查询 / 报告 ====================
