@@ -110,6 +110,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'ProjectInfo',
         component: () => import('@/views/project/info.vue'),
         meta: { title: '项目信息', icon: 'Folder' }
+      },
+      {
+        path: 'notify/config',
+        name: 'NotifyConfig',
+        component: () => import('@/views/notify/config.vue'),
+        meta: { title: '通知配置', icon: 'Bell' }
       }
     ]
   },

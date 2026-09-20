@@ -70,10 +70,20 @@
           <span>环境配置</span>
         </el-menu-item>
 
-        <el-menu-item v-if="canManageProject" index="/project/info">
-          <el-icon><Folder /></el-icon>
-          <span>项目管理</span>
-        </el-menu-item>
+        <el-sub-menu v-if="canManageProject" index="project">
+          <template #title>
+            <el-icon><Folder /></el-icon>
+            <span>项目管理</span>
+          </template>
+          <el-menu-item index="/project/info">
+            <el-icon><Folder /></el-icon>
+            <span>项目信息</span>
+          </el-menu-item>
+          <el-menu-item index="/notify/config">
+            <el-icon><Bell /></el-icon>
+            <span>通知配置</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
 
       <div class="sidebar-footer">
@@ -90,6 +100,9 @@
         </div>
 
         <div class="header-right">
+          <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0" class="bell-badge">
+            <el-icon class="bell-icon" @click="openDrawer"><Bell /></el-icon>
+          </el-badge>
           <el-dropdown trigger="click" @command="handleCommand">
             <span class="user-entry">
               <el-avatar :size="30" class="avatar">{{ avatarText }}</el-avatar>
@@ -156,16 +169,51 @@
           </transition>
         </router-view>
       </main>
+
+      <!-- 消息中心抽屉（全员可见，站内信收件箱） -->
+      <el-drawer v-model="drawerVisible" title="消息中心" direction="rtl" size="380px">
+        <template #header>
+          <div class="drawer-head">
+            <span>消息中心</span>
+            <el-button
+              link
+              type="primary"
+              :disabled="unreadCount === 0"
+              @click="markAllRead"
+            >
+              全部已读
+            </el-button>
+          </div>
+        </template>
+        <div v-loading="messagesLoading" class="msg-list">
+          <el-empty v-if="messages.length === 0" description="暂无消息" />
+          <div
+            v-for="m in messages"
+            :key="m.id"
+            class="msg-item"
+            :class="{ unread: !m.read }"
+            @click="openMessage(m)"
+          >
+            <div class="msg-row">
+              <span v-if="!m.read" class="msg-dot" />
+              <span class="msg-title">{{ m.title }}</span>
+              <span class="msg-time">{{ m.createTime }}</span>
+            </div>
+            <div class="msg-content">{{ m.content }}</div>
+          </div>
+        </div>
+      </el-drawer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  Bell,
   Close,
   Coin,
   Collection,
@@ -188,12 +236,78 @@ import { useProjectStore } from '@/stores/project'
 import { useUserStore } from '@/stores/user'
 import { useTabsStore } from '@/stores/tabs'
 import type { TabItem } from '@/stores/tabs'
+import { getMessages, getUnreadCount, markMessagesRead } from '@/api/notify'
+import type { NotifyMessage } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const projectStore = useProjectStore()
 const tabsStore = useTabsStore()
+
+/* ---- 消息中心（顶栏铃铛 + 抽屉 + 轮询未读角标） ---- */
+let pollTimer: number | undefined
+const drawerVisible = ref(false)
+const messages = ref<NotifyMessage[]>([])
+const messagesLoading = ref(false)
+const unreadCount = ref(0)
+
+async function loadUnread() {
+  const pid = projectStore.currentProject?.id
+  if (!pid) {
+    unreadCount.value = 0
+    return
+  }
+  try {
+    unreadCount.value = await getUnreadCount(pid)
+  } catch {
+    unreadCount.value = 0 // 后端未实现时兜底
+  }
+}
+
+async function loadMessages() {
+  const pid = projectStore.currentProject?.id
+  if (!pid) return
+  messagesLoading.value = true
+  try {
+    messages.value = await getMessages(pid)
+  } catch {
+    messages.value = []
+  } finally {
+    messagesLoading.value = false
+  }
+}
+
+function openDrawer() {
+  drawerVisible.value = true
+  void loadMessages()
+}
+
+async function openMessage(m: NotifyMessage) {
+  const pid = projectStore.currentProject?.id
+  if (!m.read && pid) {
+    try {
+      await markMessagesRead([m.id], pid)
+      m.read = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    } catch {
+      // 后端未实现时兜底
+    }
+  }
+  if (m.linkUrl) router.push(m.linkUrl)
+}
+
+async function markAllRead() {
+  const pid = projectStore.currentProject?.id
+  if (!pid) return
+  try {
+    await markMessagesRead('all', pid)
+    messages.value.forEach((m) => (m.read = true))
+    unreadCount.value = 0
+  } catch {
+    // 后端未实现时兜底
+  }
+}
 
 const activePath = computed(() => {
   if (route.path.startsWith('/case')) return '/case'
@@ -204,6 +318,7 @@ const activePath = computed(() => {
 
 const defaultOpeneds = computed(() => {
   const path = route.path
+  if (path.startsWith('/project') || path.startsWith('/notify')) return ['project']
   if (path.startsWith('/base')) return ['base']
   if (path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
   if (path.startsWith('/plan') || path.startsWith('/report') || path.startsWith('/batch')) return ['run']
@@ -315,12 +430,21 @@ onMounted(() => {
     })
   }
   refreshProjectRole()
+  loadUnread()
+  pollTimer = window.setInterval(loadUnread, 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) window.clearInterval(pollTimer)
 })
 
 // 项目切换（store.setCurrentProject 已触发加载，这里兜底防止遗漏）
 watch(
   () => projectStore.currentProject?.id,
-  () => refreshProjectRole()
+  () => {
+    refreshProjectRole()
+    loadUnread()
+  }
 )
 </script>
 
@@ -457,6 +581,93 @@ watch(
 
 .user-name {
   font-size: 14px;
+}
+
+/* 顶栏铃铛 */
+.bell-badge {
+  margin-right: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.bell-icon {
+  font-size: 20px;
+  color: #5f6368;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.bell-icon:hover {
+  color: #1d63d1;
+}
+
+/* 消息中心抽屉 */
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.msg-list {
+  min-height: 120px;
+}
+
+.msg-item {
+  padding: 12px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.msg-item:hover {
+  background: #f5f8ff;
+}
+
+.msg-item.unread {
+  background: #f0f6ff;
+}
+
+.msg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.msg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1d63d1;
+  flex: none;
+}
+
+.msg-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-time {
+  font-size: 12px;
+  color: #9ca3af;
+  flex: none;
+}
+
+.msg-content {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ---------- 标签栏 ---------- */

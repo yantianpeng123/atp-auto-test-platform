@@ -713,3 +713,91 @@ export interface CaseExecuteResult {
   durationMs: number
   rounds: RoundExecuteResult[]
 }
+
+/**
+ * 通知中心（与后端 /api/notify/** 对齐，设计见 docs/phase5-features-design.md §3）
+ */
+
+/** 渠道类型：站内信 / 钉钉 Webhook / 163 邮件 */
+export type NotifyChannelType = 'INAPP' | 'DINGTALK' | 'EMAIL_163'
+
+/** 触发事件 */
+export type NotifyEvent = 'EXEC_DONE' | 'EXEC_FAIL' | 'BATCH_DONE'
+
+/** 通知渠道出参 */
+export interface NotifyChannel {
+  id: number
+  projectId: number
+  /** 渠道类型 */
+  type: NotifyChannelType
+  /** 渠道显示名（如「钉钉-交易群」） */
+  name: string
+  /** 是否启用 */
+  enabled: boolean
+  /** 渠道配置 JSON（结构见设计文档 §3.1）：DINGTALK=webhook/secret/atMobiles；EMAIL_163=host/port/username/authCode/from/ssl */
+  config: Record<string, unknown> | null
+  createTime: string
+}
+
+/** 新增/编辑渠道入参 */
+export interface NotifyChannelSaveParams {
+  projectId: number
+  type: NotifyChannelType
+  name: string
+  enabled?: boolean
+  config: Record<string, unknown>
+}
+
+/** 通知规则出参 */
+export interface NotifyRule {
+  id: number
+  projectId: number
+  /** 触发事件 */
+  event: NotifyEvent
+  /** 命中的渠道 id 列表（后端存 JSON 列） */
+  channelIds: number[]
+  /** 附加条件，如 { onlyFail: true } */
+  condition: Record<string, unknown> | null
+  enabled: boolean
+  createTime: string
+}
+
+/** 新增规则入参 */
+export interface NotifyRuleSaveParams {
+  projectId: number
+  event: NotifyEvent
+  channelIds: number[]
+  condition?: Record<string, unknown>
+  enabled?: boolean
+}
+
+/** 发送日志出参 */
+export interface NotifyLog {
+  id: number
+  projectId: number
+  event: NotifyEvent
+  channelType: NotifyChannelType
+  /** 发送目标（webhook url / 收件人 / 站内信用户） */
+  target: string
+  /** SUCCESS / FAILED */
+  status: 'SUCCESS' | 'FAILED'
+  /** 发送内容摘要 */
+  content: string
+  /** 失败原因 */
+  error: string | null
+  createTime: string
+}
+
+/** 站内信收件箱出参 */
+export interface NotifyMessage {
+  id: number
+  userId: number
+  projectId: number
+  title: string
+  content: string
+  /** 是否已读 */
+  read: boolean
+  /** 点击跳转的报告/详情 URL */
+  linkUrl: string | null
+  createTime: string
+}
