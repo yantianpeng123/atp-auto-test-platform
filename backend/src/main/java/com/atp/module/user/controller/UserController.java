@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * 用户接口
  */
@@ -44,5 +47,17 @@ public class UserController {
     @GetMapping("/check-username")
     public Result<Boolean> checkUsername(@RequestParam String username) {
         return Result.success(userService.getByUsername(username) == null);
+    }
+
+    /**
+     * 平台所有用户列表（用于「添加成员」等需要选择用户的下拉场景）
+     */
+    @GetMapping("/list")
+    public Result<List<UserInfoVO>> list() {
+        List<User> users = userService.list();
+        List<UserInfoVO> vos = users.stream()
+                .map(AuthServiceImpl::toUserInfoVO)
+                .collect(Collectors.toList());
+        return Result.success(vos);
     }
 }

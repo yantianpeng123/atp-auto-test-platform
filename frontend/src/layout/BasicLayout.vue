@@ -17,10 +17,6 @@
             <el-icon><FolderOpened /></el-icon>
             <span>测试资产</span>
           </template>
-          <el-menu-item index="/project" disabled>
-            <el-icon><Folder /></el-icon>
-            <span>项目管理</span>
-          </el-menu-item>
           <el-menu-item index="/case">
             <el-icon><Document /></el-icon>
             <span>用例管理</span>
@@ -72,6 +68,11 @@
         <el-menu-item index="/env">
           <el-icon><Setting /></el-icon>
           <span>环境配置</span>
+        </el-menu-item>
+
+        <el-menu-item v-if="canManageProject" index="/project/info">
+          <el-icon><Folder /></el-icon>
+          <span>项目管理</span>
         </el-menu-item>
       </el-menu>
 
@@ -204,10 +205,22 @@ const activePath = computed(() => {
 const defaultOpeneds = computed(() => {
   const path = route.path
   if (path.startsWith('/base')) return ['base']
-  if (path.startsWith('/project') || path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
+  if (path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
   if (path.startsWith('/plan') || path.startsWith('/report') || path.startsWith('/batch')) return ['run']
   return []
 })
+
+/** 是否展示「项目管理」菜单：全局 ADMIN 或项目 OWNER/MAINTAINER */
+const canManageProject = computed(
+  () => userStore.isAdmin || projectStore.canManageProject
+)
+
+/** 进入布局即加载当前用户在项目中的角色（store 初始化读 localStorage 不会自动触发） */
+function refreshProjectRole() {
+  if (projectStore.currentProject) {
+    projectStore.loadMyRole(projectStore.currentProject.id)
+  }
+}
 
 const avatarText = computed(() => userStore.displayName.charAt(0).toUpperCase())
 
@@ -301,7 +314,14 @@ onMounted(() => {
       router.push('/login')
     })
   }
+  refreshProjectRole()
 })
+
+// 项目切换（store.setCurrentProject 已触发加载，这里兜底防止遗漏）
+watch(
+  () => projectStore.currentProject?.id,
+  () => refreshProjectRole()
+)
 </script>
 
 <style scoped>

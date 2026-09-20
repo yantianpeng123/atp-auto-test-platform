@@ -7,6 +7,7 @@ import 'element-plus/dist/index.css'
 
 import App from './App.vue'
 import router from './router'
+import { roleDirective } from './directives/role'
 import './styles/index.css'
 
 const app = createApp(App)
@@ -18,5 +19,6 @@ for (const [name, component] of Object.entries(ElementPlusIcons)) {
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn, size: 'default' })
+app.directive('role', roleDirective)
 
 app.mount('#app')

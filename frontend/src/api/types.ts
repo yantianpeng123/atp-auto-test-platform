@@ -138,6 +138,48 @@ export interface ProjectCreateParams {
 }
 
 /**
+ * 项目级 RBAC（成员与角色）
+ */
+
+/** 项目内角色（与后端 tb_project_member.role 对齐） */
+export type ProjectRole = 'OWNER' | 'MAINTAINER' | 'DEVELOPER' | 'VIEWER'
+
+/** 项目成员出参 */
+export interface ProjectMember {
+  id: number
+  projectId: number
+  userId: number
+  username: string
+  nickname: string
+  /** 项目内角色 */
+  role: ProjectRole
+  /** 邀请人昵称（展示用，可为空） */
+  inviterName?: string | null
+  createTime: string
+}
+
+/** 项目成员查询入参 */
+export interface ProjectMemberQuery {
+  projectId?: number
+  page?: number
+  size?: number
+}
+
+/** 新增/邀请成员入参 */
+export interface AddMemberParams {
+  projectId: number
+  /** 被邀请人用户名 */
+  username: string
+  role: ProjectRole
+}
+
+/** 修改成员角色入参 */
+export interface UpdateMemberRoleParams {
+  id: number
+  role: ProjectRole
+}
+
+/**
  * 接口定义
  */
 

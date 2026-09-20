@@ -16,7 +16,7 @@ USE `atp`;
 DROP TABLE IF EXISTS `sys_user`;
 CREATE TABLE `sys_user`
 (
-    `id`               BIGINT                                                        NOT NULL COMMENT '主键ID',
+    `id`               BIGINT                                                        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     `username`         VARCHAR(50)                                                   NOT NULL COMMENT '登录账号',
     `password`         VARCHAR(100)                                                  NOT NULL COMMENT 'BCrypt 密码',
     `nickname`         VARCHAR(50)  DEFAULT NULL COMMENT '昵称',
@@ -65,6 +65,24 @@ CREATE TABLE `tb_project`
     UNIQUE KEY `uk_name` (`name`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='项目表';
+
+-- 项目成员与角色（项目级 RBAC）
+DROP TABLE IF EXISTS `tb_project_member`;
+CREATE TABLE `tb_project_member`
+(
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `project_id`  BIGINT       NOT NULL COMMENT '项目ID（关联 tb_project.id）',
+    `user_id`     BIGINT       NOT NULL COMMENT '用户ID（关联 sys_user.id）',
+    `role`        VARCHAR(20)  NOT NULL COMMENT '项目内角色：OWNER/MAINTAINER/DEVELOPER/VIEWER',
+    `create_by`   BIGINT       DEFAULT NULL COMMENT '邀请人用户ID',
+    `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+    `update_time` DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`     TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-未删 1-已删',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_project_user` (`project_id`, `user_id`),
+    KEY `idx_project` (`project_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='项目成员与角色（项目级 RBAC）';
 
 -- 工程表（基础数据管理）
 DROP TABLE IF EXISTS `tb_application`;

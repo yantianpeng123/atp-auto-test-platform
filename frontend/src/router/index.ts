@@ -104,6 +104,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'ReportCenter',
         component: () => import('@/views/execute/reportCenter.vue'),
         meta: { title: '报告中心', icon: 'DataLine' }
+      },
+      {
+        path: 'project/info',
+        name: 'ProjectInfo',
+        component: () => import('@/views/project/info.vue'),
+        meta: { title: '项目信息', icon: 'Folder' }
       }
     ]
   },

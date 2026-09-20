@@ -1,4 +1,4 @@
-package com.atp.module.user.entity;
+package com.atp.module.project.entity;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
@@ -11,40 +11,27 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 系统用户
+ * 项目成员与角色（项目级 RBAC）。
+ *
+ * <p>{@code role} 存储 {@link com.atp.module.project.enums.ProjectRole} 的枚举名（大写字符串）。
+ * 同一 {(project_id, user_id)} 唯一；逻辑删除沿用 {@code deleted}。
  */
 @Data
-@TableName("sys_user")
-public class User {
+@TableName("tb_project_member")
+public class ProjectMember {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String username;
+    private Long projectId;
 
-    private String password;
+    private Long userId;
 
-    private String nickname;
-
-    private String email;
-
-    private String phone;
-
-    private String avatar;
-
-    /**
-     * 状态：0-禁用 1-正常
-     */
-    private Integer status;
-
-    /**
-     * 角色：ADMIN / TESTER / VIEWER
-     */
+    /** OWNER/MAINTAINER/DEVELOPER/VIEWER */
     private String role;
 
-    private String lastLoginIp;
-
-    private LocalDateTime lastLoginTime;
+    /** 邀请人用户ID（审计用，出参时转为昵称） */
+    private Long createBy;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
