@@ -1,9 +1,9 @@
 # ATP 自动化测试平台 · 项目交接文档
 
-> 更新时间：2026-09-20（本轮：项目级 RBAC 成员管理 + 项目列表可见性修复，已推送 origin/main）
+> 更新时间：2026-09-21（本轮：通知中心模块 后端 + 前端 全部落地 + 修复通知未发送缺陷，已推送 origin/main）
 > 定位：接口自动化 / 用例编排 / 调试执行平台（前后端分离）
 > 代码仓库：git@github.com:yantianpeng123/atp-auto-test-platform.git（分支 `main`）
-> 当前 HEAD：`e7c80a1`，已推送至 `origin/main`，工作区干净
+> 当前 HEAD：`29685bc`，已推送至 `origin/main`，工作区干净
 
 ---
 
@@ -64,7 +64,7 @@
 | 第一阶段 | 架构 + JWT 鉴权 + 登录注册 + 项目管理 | ✅ 完成 |
 | 第二阶段 | 基础数据（工程/版本/模块）+ 接口定义 | ✅ 完成 |
 | 第三阶段 | **用例管理 + 步骤编排 + 执行引擎 + 数据源 + 测试计划** | ✅ 完成 |
-| 第四阶段 | 定时任务批次、**报告中心（前后端）**、图表看板、通知 | ✅ 批次/报告前后端完成；图表看板/通知未开始 |
+| 第四阶段 | 定时任务批次、**报告中心（前后端）**、图表看板、通知 | ✅ 批次/报告/通知完成；图表看板未开始 |
 | 第五阶段 | CI 集成、项目级 RBAC、并发执行 | 🟡 RBAC 已完成；CI / 并发未开始 |
 
 ### 4.0 本轮进度快照（2026-09-16）
@@ -110,7 +110,27 @@
 | 8 | 前端：成员管理**合并进 info.vue**（删除 members.vue），侧边栏「成员管理」菜单项移除、降级为单个「项目信息」；新增 `v-role` 指令、`api/projectMember`、`api/user`、`stores.currentProjectRole/loadMyRole/canManageProject`；"新增项目"入口保留在 `select.vue`（仅 ADMIN 可见） | 重构 | `frontend/src/views/project/info.vue`、`layout/BasicLayout.vue`、`directives/role.ts`、`api/projectMember.ts`、`api/user.ts`、`stores/project.ts`、`main.ts`、`router/index.ts` | ✅ |
 | 9 | 设计文档 `docs/phase5-features-design.md`（图表看板/通知/CI/RBAC 思路 + UI + 入口决策） | 文档 | — | ✅ |
 
-**一句话结论**：项目级 RBAC 已完成基本闭环——任意项目可添加 OWNER/MAINTAINER/DEVELOPER/VIEWER 成员，成员登录后可在 `/api/project/list` 看到被授权的项目（修复前非 owner 本人看不到），管理员仍见全部。下一步可选做图表看板/通知/CI（设计稿已就绪）。
+**一句话结论**：项目级 RBAC 已完成基本闭环——任意项目可添加 OWNER/MAINTAINER/DEVELOPER/VIEWER 成员，成员登录后可在 `/api/project/list` 看到被授权的项目（修复前非 owner 本人看不到），管理员仍见全部。下一步可选做图表看板/CI（设计稿已就绪）。
+
+### 4.0.3 通知中心模块（2026-09-21，commit `e8bb2de` → `29685bc`）
+
+本轮补齐**第四阶段通知中心**：后端新建 `module/notify`（4 表 + 渠道/规则/日志/站内信 + 钉钉/163/站内信三发送器 + 事件驱动派发），前端新增「通知配置」页（渠道/规则/发送日志三 Tab）与顶栏「消息中心」站内信收件箱（未读红点 + 标记已读）。全部基于设计稿 `docs/phase5-features-design.md` §3，已**端到端验证**：单接口执行通过 → 钉钉 Webhook 真实推送 `SUCCESS` + 站内信写入项目全员（`tb_notify_message` 落 2 条）。
+
+| # | 事项 | 类型 | 文件 / 端点 | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | `tb_notify_channel` / `tb_notify_rule` / `tb_notify_log` / `tb_notify_message` 4 表 + 逻辑删除 + 项目隔离 | 新增 | `db/schema.sql` | ✅ |
+| 2 | `NotifyEvent` / `NotifyPayload` / `NotifyEventListener`（`@Async` + `AFTER_COMMIT`，`fallbackExecution=true` 支持无事务场景派发） | 新增 | `module/notify/event/**` | ✅ |
+| 3 | `NotifySender` 接口 + `DingTalkSender`（签名加签）/ `Mail163Sender`（SSL 465）/ `InAppSender`（`messageMapper.insert` 写站内信） | 新增 | `module/notify/channel/**` | ✅ |
+| 4 | `NotifyService.dispatch`：按 `project_id + enabled=1 + event` 查规则 → 命中逐渠道 `sender.send` → 写 `tb_notify_log`；站内信收件人放宽至项目全部成员（含 VIEWER）并确保执行人必收到 | 新增 | `module/notify/service/impl/NotifyServiceImpl.java` | ✅ |
+| 5 | `ExecuteServiceImpl.publishNotifyEvents`：单接口执行成功发布 `EXEC_DONE`、失败追加 `EXEC_FAIL` | 新增 | `module/execute/service/impl/ExecuteServiceImpl.java` | ✅ |
+| 6 | `PlanBatchServiceImpl` 批次跑完发布 `BATCH_DONE`（修复"批次完成通知永不触发"——旧 `executeBatch` 从未发布该事件） | 新增 | `module/plan/service/impl/PlanBatchServiceImpl.java` | ✅ |
+| 7 | `NotifyController`（`/api/notify/*`）：渠道 CRUD、规则 CRUD、发送日志分页、站内信收件箱、标记已读、未读计数 | 新增 | `module/notify/controller/NotifyController.java` | ✅ |
+| 8 | 前端「通知配置」页（渠道/规则/日志三 Tab）+ 顶栏消息中心 | 新增 | `frontend/src/views/notify/config.vue`、`layout/BasicLayout.vue` | ✅ |
+| 9 | 缺陷修复：① 保留字列 `event`/`condition`/`type`/`is_read` 强制 `@TableField("`xxx`")`（`is_read` 同时 `@JsonProperty("Isread")` 对齐前端，解决 `Unknown column 'isread'`）；② 前端 `enabled` 改 `number`、提交发 `1`/`0`（解决 DTO `Integer` 收 JSON 布尔 `true` 导致 500）；③ 前端 `BasicLayout` 已读字段 `.read` → `.Isread` | 缺陷 | commit `29685bc` | ✅ |
+
+> **配置注意（数据层面）**：项目 3 原有两条规则最初配成 `event=BATCH_DONE`，单接口执行（`EXEC_DONE`）不会命中，故"执行通过却不发通知"。已将这两条规则经 DB 改为 `EXEC_DONE`，单接口执行即可触发钉钉 + 站内信。新配规则请直接选 `EXEC_DONE`（单接口）或 `BATCH_DONE`（批次）。
+
+**一句话结论**：通知中心已可用——配置钉钉/163/站内信渠道 + 规则（`event` ∈ `EXEC_DONE`/`EXEC_FAIL`/`BATCH_DONE`）→ 用例/批次执行后自动派发；发送日志与站内信均落库可查。实测单接口执行通过时钉钉真实推送成功、站内信写入项目全员。
 
 ### 4.1 已完成模块
 
@@ -130,12 +150,13 @@
 | 执行记录落库 | ✅ | ✅（抽屉/报告） | `tb_execution`/`_detail`/`_assertion` 持久化，历史查询接口 |
 | 执行报告/报告中心 | ✅ | ✅ | 报告详情（轮次分组/仅看失败/JSON 美化/重试）+ 报告列表，后端 `GET /api/execute/{executionId}` + `/list` 已于 09-14 补齐，前端已接真实接口 |
 | 数据生成器（**阶段 1+2+3 已落地**） | ✅ | ✅ | 前后端完全闭环：前端全链路（生成器管理并入「接口组件」页「数据生成器」页签，`GeneratorSelectDialog`/`GeneratorFormDialog` 直弹，`stepType=3` 步骤写入，客户端 `api/generator.ts` 已接真实 HTTP）；**后端 `tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式引擎 + `step_type=3` 执行分支均已实现**。执行时 `stepType=3` 调 `GeneratorEngine.generate(type, params)` 生成值并写入变量池，后续步骤可用 `${variableName}` 引用；`regen_each_run` 列已落库但跨轮固定语义按需求**暂不实现**（变量池每轮重建即每轮重算）。保存链路（`CaseServiceImpl`/`ApiComponentServiceImpl`）对 `stepType=3` 校验 `generatorId` 存在、`variableName` 合法，不再因 `apiId` 空报"请选择步骤关联接口"。详见 `docs/data-generator-and-expression-design.md` |
+| 通知中心（菜单「通知配置」+ 顶栏消息中心） | ✅ | ✅ | 后端 `module/notify`：4 表（渠道/规则/日志/站内信）+ `NotifySender` 三渠道实现（钉钉 Webhook 加签 / 163 邮件 SSL465 / 站内信 `messageMapper.insert`）+ `NotifyEventListener`（`@Async`+`AFTER_COMMIT` 事件驱动派发）+ `NotifyController`（`/api/notify/*`）；前端「通知配置」页（渠道/规则/日志三 Tab）+ 顶栏消息中心（未读红点 + 收件箱 + 标记已读）。单接口执行发布 `EXEC_DONE`/`EXEC_FAIL`、批次完成发布 `BATCH_DONE`，`NotifyService.dispatch` 按 `project_id+enabled+event` 命中规则逐渠道发送并写 `tb_notify_log`、站内信写 `tb_notify_message`。详见 §4.0.3 与 §七「通知中心」 |
 
 ### 4.2 尚未实现
 
 - **执行报告"重跑"精度**：报告页"失败重试"当前降级为整用例重跑（调 `executeCase`），精确单步重跑需执行引擎后续支持。
 - **批次执行异步化**：`executeBatch` 当前为同步执行（HTTP 返回即跑完），长批次可能超时，建议改"立即返回 runId + 后台异步"。
-- **图表看板、通知、CI 集成、并发执行** 均未开始（项目级 RBAC 已于 2026-09-20 完成）。
+- **图表看板、CI 集成、并发执行** 均未开始（项目级 RBAC 已于 2026-09-20 完成，通知中心已于 2026-09-21 完成）。
 
 前端菜单现状：「组合组件」「测试计划」「定时任务」「报告中心」均已启用（非 disabled）。
 
@@ -220,7 +241,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 
 ## 六、数据库设计
 
-### 已建表（23 张）
+### 已建表（27 张）
 
 | 表 | 用途 | 状态 |
 | --- | --- | --- |
@@ -238,6 +259,10 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | `tb_execution` / `tb_execution_detail` / `tb_execution_assertion` | 执行记录 / 明细 / 断言 | ✅ 使用中（execute 模块落库） |
 | `tb_plan_batch` / `tb_plan_batch_item` | 批次 / 批次关联计划 | ✅ 使用中 |
 | `tb_plan_batch_run` / `tb_plan_batch_run_item` | 批次运行实例 / 运行项 | ✅ 使用中 |
+| `tb_notify_channel` | 通知渠道（`type` INAPP/DINGTALK/EMAIL_163，`config` JSON，保留字 `type` 加反引号） | ✅ 新增（2026-09-21） |
+| `tb_notify_rule` | 通知规则（`event` + `channel_ids` + `condition`，保留字 `event`/`condition` 加反引号） | ✅ 新增（2026-09-21） |
+| `tb_notify_log` | 通知发送日志（`status` SUCCESS/FAILED + `error`） | ✅ 新增（2026-09-21） |
+| `tb_notify_message` | 站内信收件箱（`user_id`/`project_id`/`title`/`content`/`is_read`/`link_url`） | ✅ 新增（2026-09-21） |
 
 ### 主键约定
 - **新建表一律用 `IdType.AUTO`（自增）+ 表加 `AUTO_INCREMENT`**。
@@ -360,6 +385,23 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 | GET | `/api/base/generator/functions` | 函数名+参数+说明+示例（前端帮助/语法提示） |
 | POST | `/api/base/generator/preview` | 传 template 或 type+params，返回试生成结果（列表「示例值」也走此接口） |
 
+### 通知中心（✅ 后端已落地，前端已接真实接口）
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/notify/channel` | 渠道列表（按项目） |
+| POST | `/api/notify/channel` | 新增渠道（`type`/`name`/`enabled`/`config`，`enabled` 传 `1`/`0`） |
+| PUT | `/api/notify/channel/{id}` | 更新渠道 |
+| DELETE | `/api/notify/channel/{id}` | 删除渠道 |
+| GET | `/api/notify/rule` | 规则列表（按项目） |
+| POST | `/api/notify/rule` | 新增规则（`event`/`channel_ids`/`condition`/`enabled`） |
+| DELETE | `/api/notify/rule/{id}` | 删除规则 |
+| GET | `/api/notify/log` | 发送日志分页（`projectId`/`page`/`size`） |
+| GET | `/api/notify/messages` | 站内信收件箱（`projectId`，可选 `unread=true`） |
+| POST | `/api/notify/messages/read` | 标记已读（`ids` 或 `all`） |
+| GET | `/api/notify/unread-count` | 未读计数 |
+
+> 触发事件：`EXEC_DONE`（单接口执行成功）/ `EXEC_FAIL`（单接口执行失败）/ `BATCH_DONE`（批次执行完成）。规则 `event` 须与之一致才派发。渠道类型：`INAPP`（站内信）/ `DINGTALK`（Webhook + 签名加签）/ `EMAIL_163`（163 邮件 SSL465）。发送结果见 `tb_notify_log`，站内信见 `tb_notify_message`。
+
 ---
 
 ## 八、核心设计约定
@@ -410,7 +452,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 - **数据生成器 + 表达式模板（前端已实现，后端已于 2026-09-17 阶段1/2/3 全部落地）**：详见 `docs/data-generator-and-expression-design.md`。前端全链路已完成：生成器管理并入「组合组件」模块「数据生成器」页签（改造 `generator/index.vue` 内嵌、移除隐藏路由 `/base/generator`）、新增 `GeneratorSelectDialog.vue` 选择已有生成器、组合组件「生成变量」卡片直接弹出（新建/选择已有）写入 `stepType=3` 步骤、客户端运行时 `api/generator.ts` 已接真实 HTTP、用例扩展「生成变量（stepType=3）」接入与表格标签。后端已补齐：`tb_data_generator` 表 + CRUD + `GeneratorEngine` 表达式解析器（白名单、禁 eval）+ `step_type=3` 执行分支（生成值写入变量池）+ `VariableResolver` 追加生成器解析遍（`${func(args)}`）。`regen_each_run` 跨轮固定语义按需求暂不实现（变量池每轮重建即每轮重算）。
 - 批次执行同步化（长批次 HTTP 超时风险，建议改异步）。
 - 报告页"失败重试"精度（当前整用例重跑降级）。
-- 图表看板、通知、CI 集成、并发执行均未开始（项目级 RBAC 已于 2026-09-20 完成）。
+- 图表看板、CI 集成、并发执行均未开始（项目级 RBAC 已于 2026-09-20 完成，通知中心已于 2026-09-21 完成）。
 - 用例列表页无「执行」入口，调试仅能在用例编辑页进行。
 - 数据源弹窗缺陷见 9.1（高优先级两项仍待修）。
 
@@ -444,6 +486,7 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 9. **开发协作**：本人（开发者）在工作过程中手动编辑过的代码，后续接手者请勿擅自改动；需调整时先沟通确认。
 10. **本地 HTTP 验证用 Node，不要用 curl**：沙箱的透明代理会把对 `127.0.0.1` 的请求拦截成 `AUTH_REQUIRED`，`curl --noproxy '*'` 与清除 `HTTP_PROXY` 环境变量**均无效**。Node 的 `http.request` / `fetch` 不读代理环境变量，可正常直连。另：`mvn spring-boot:run` 默认起在 8080，被占用时用 `-Dspring-boot.run.arguments=--server.port=8088` 指定。
 11. **生成函数必须写成调用形式**：用例里要写 `${phone()}`，不能写 `${phone}`——后者会被 `VariableResolver` 当作未知变量替换成空串。当前实现在"变量不存在且名字是已注册函数"时抛明确报错，不会静默变空。
+12. **通知规则 `event` 必须与触发事件匹配**：单接口执行（`POST /api/execute/case/{id}`）成功发布 `EXEC_DONE`、失败发布 `EXEC_FAIL`；批次完成（`POST /api/plan/batch/{id}/execute` 跑完）发布 `BATCH_DONE`。规则 `event` 须与之一致才会派发——若只想在"单接口执行通过"时收到通知，应配 `EXEC_DONE`（不是 `BATCH_DONE`）。钉钉渠道 `config` 需填 `webhook`/`secret`（签名加签），163 邮件需 `host`/`port`/`username`/`authCode`/`from`/`ssl`/`to`。站内信收件人为项目**全部成员**（含 VIEWER），执行人必收到。发送结果看 `tb_notify_log`，站内信看 `tb_notify_message`。
 
 ---
 
@@ -471,6 +514,6 @@ utils/    auth.ts        # token 存取（localStorage key: atp_token）
 7. **报告页失败重试精度**：当前降级为整用例重跑，需执行引擎支持单步重跑。
 
 ### P3 · 长期规划
-8. **图表看板 / 通知 / CI 集成 / 并发执行**。项目级 RBAC（成员管理 CRUD + 可见性修复）已于 2026-09-20 完成（见 §4.0.2），已从本列表移除；看板依赖执行数据，建议优先做看板与通知，设计稿见 `docs/phase5-features-design.md`。
+8. **图表看板 / CI 集成 / 并发执行**。项目级 RBAC（成员管理 CRUD + 可见性修复）已于 2026-09-20 完成，通知中心（渠道/规则/日志/站内信 + 钉钉/163/站内信三渠道 + 批次完成事件）已于 2026-09-21 完成，均已从本列表移除；看板依赖执行数据，建议优先做图表看板，设计稿见 `docs/phase5-features-design.md`。
 
 > 报告中心后端接口已于 2026-09-14 补齐并移除出本列表。
