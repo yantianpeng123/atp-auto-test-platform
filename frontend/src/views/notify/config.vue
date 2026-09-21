@@ -408,7 +408,7 @@ async function saveChannel() {
     if (channelForm.id) {
       await updateChannel(channelForm.id, {
         name: channelForm.name,
-        enabled: channelForm.enabled,
+        enabled: channelForm.enabled ? 1 : 0,
         config
       })
     } else {
@@ -416,7 +416,7 @@ async function saveChannel() {
         projectId: projectId.value,
         type: channelForm.type,
         name: channelForm.name,
-        enabled: channelForm.enabled,
+        enabled: channelForm.enabled ? 1 : 0,
         config
       })
     }
@@ -432,7 +432,7 @@ async function saveChannel() {
 
 async function toggleChannel(row: NotifyChannel, val: boolean) {
   try {
-    await updateChannel(row.id, { enabled: val })
+    await updateChannel(row.id, { enabled: val ? 1 : 0 })
     row.enabled = val
   } catch {
     // 后端未实现时静默兜底
@@ -502,7 +502,7 @@ async function saveRule() {
       event: ruleForm.event,
       channelIds: ruleForm.channelIds,
       condition: ruleForm.onlyFail ? { onlyFail: true } : {},
-      enabled: ruleForm.enabled
+      enabled: ruleForm.enabled ? 1 : 0
     })
     ElMessage.success('已保存')
     ruleDialogVisible.value = false

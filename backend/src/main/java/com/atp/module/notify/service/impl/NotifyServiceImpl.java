@@ -184,7 +184,7 @@ public class NotifyServiceImpl implements NotifyService {
                 .eq("project_id", projectId)
                 .orderByDesc("create_time");
         if (Boolean.TRUE.equals(unread)) {
-            qw.eq("read", 0);
+            qw.eq("`is_read`", 0);
         }
         return messageMapper.selectList(qw).stream().map(this::toMessageVO).toList();
     }
@@ -202,7 +202,7 @@ public class NotifyServiceImpl implements NotifyService {
             qw.in("id", req.getIds());
         }
         NotifyMessage upd = new NotifyMessage();
-        upd.setRead(1);
+        upd.setIsread(1);
         messageMapper.update(upd, qw);
     }
 
@@ -210,8 +210,8 @@ public class NotifyServiceImpl implements NotifyService {
     public long unreadCount(Long projectId, UserPrincipal principal) {
         Long count = messageMapper.selectCount(new QueryWrapper<NotifyMessage>()
                 .eq("user_id", principal.getId())
-                .eq("project_id", projectId)
-                .eq("read", 0));
+        .eq("project_id", projectId)
+        .eq("`is_read`", 0));
         return count == null ? 0 : count;
     }
 
@@ -225,7 +225,7 @@ public class NotifyServiceImpl implements NotifyService {
         List<NotifyRule> rules = ruleMapper.selectList(new QueryWrapper<NotifyRule>()
                 .eq("project_id", payload.getProjectId())
                 .eq("enabled", 1)
-                .eq("event", payload.getEvent()));
+                .eq("`event`", payload.getEvent()));
         if (rules.isEmpty()) {
             return;
         }
@@ -280,7 +280,13 @@ public class NotifyServiceImpl implements NotifyService {
     private NotifyRecipients resolveRecipients(NotifyChannel ch, NotifyPayload payload) {
         NotifyRecipients r = new NotifyRecipients();
         if ("INAPP".equals(ch.getType())) {
-            r.setUserIds(projectMemberUserIds(payload.getProjectId()));
+            List<Long> userIds = projectMemberUserIds(payload.getProjectId());
+            // 确保执行人本人必收到站内信（即便其不在项目成员表中）
+            if (payload.getExecutorId() != null && !userIds.contains(payload.getExecutorId())) {
+                userIds = new ArrayList<>(userIds);
+                userIds.add(payload.getExecutorId());
+            }
+            r.setUserIds(userIds);
         } else if ("EMAIL_163".equals(ch.getType())) {
             r.setEmails(projectMemberEmails(payload.getProjectId()));
         }
@@ -306,12 +312,14 @@ public class NotifyServiceImpl implements NotifyService {
     // ==================== 辅助 ====================
 
     private void buildContent(NotifyPayload p) {
+        boolean batch = "BATCH_DONE".equals(p.getEvent());
+        String noun = batch ? "批次" : "用例";
         String verb = "EXEC_FAIL".equals(p.getEvent()) ? "失败" : "完成";
-        p.setTitle(String.format("[测试通知] 用例《%s》执行%s", str(p.getCaseName()), verb));
+        p.setTitle(String.format("[测试通知] %s《%s》执行%s", noun, str(p.getCaseName()), verb));
         String link = p.getLinkUrl() == null ? "" : p.getLinkUrl();
         p.setContent(String.format(
-                "**用例：** %s\n**结果：** %s\n**通过/失败轮次：** %d / %d\n**执行人：** %s\n**查看报告：** %s",
-                str(p.getCaseName()), str(p.getStatus()),
+                "**%s：** %s\n**结果：** %s\n**通过/失败轮次：** %d / %d\n**执行人：** %s\n**查看报告：** %s",
+                noun, str(p.getCaseName()), str(p.getStatus()),
                 nz(p.getPassedRounds()), nz(p.getFailedRounds()),
                 str(p.getExecutorName()), link));
     }
@@ -343,12 +351,11 @@ public class NotifyServiceImpl implements NotifyService {
         };
     }
 
-    /** 项目内可接收站内信的成员 userId 列表 */
+    /** 项目内可接收站内信的成员 userId 列表（含所有角色，含 VIEWER） */
     private List<Long> projectMemberUserIds(Long projectId) {
         List<ProjectMember> members = projectMemberMapper.selectList(new QueryWrapper<ProjectMember>()
                 .eq("project_id", projectId)
-                .eq("deleted", 0)
-                .in("role", "OWNER", "MAINTAINER", "DEVELOPER"));
+                .eq("deleted", 0));
         List<Long> ids = new ArrayList<>();
         for (ProjectMember m : members) {
             ids.add(m.getUserId());
@@ -445,7 +452,7 @@ public class NotifyServiceImpl implements NotifyService {
                 .projectId(msg.getProjectId())
                 .title(msg.getTitle())
                 .content(msg.getContent())
-                .read(msg.getRead() != null && msg.getRead() == 1)
+                .isread(msg.getIsread() != null && msg.getIsread() == 1)
                 .linkUrl(msg.getLinkUrl())
                 .createTime(msg.getCreateTime())
                 .build();

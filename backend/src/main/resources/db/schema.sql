@@ -611,7 +611,7 @@ CREATE TABLE `tb_notify_message`
     `project_id`  BIGINT       NOT NULL COMMENT '项目ID',
     `title`       VARCHAR(200) DEFAULT NULL COMMENT '站内信标题',
     `content`     TEXT         DEFAULT NULL COMMENT '站内信内容',
-    `read`        TINYINT      DEFAULT 0 COMMENT '是否已读 0-未读 1-已读',
+    `is_read`        TINYINT      DEFAULT 0 COMMENT '是否已读 0-未读 1-已读',
     `link_url`    VARCHAR(500) DEFAULT NULL COMMENT '点击跳转的报告/详情URL',
     `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),

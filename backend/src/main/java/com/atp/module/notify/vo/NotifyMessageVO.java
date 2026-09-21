@@ -1,5 +1,7 @@
 package com.atp.module.notify.vo;
 
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,7 +19,8 @@ public class NotifyMessageVO {
     private Long projectId;
     private String title;
     private String content;
-    private Boolean read;
+    @JsonProperty("Isread")
+    private Boolean isread;
     private String linkUrl;
     private LocalDateTime createTime;
 }

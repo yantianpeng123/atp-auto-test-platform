@@ -744,7 +744,7 @@ export interface NotifyChannelSaveParams {
   projectId: number
   type: NotifyChannelType
   name: string
-  enabled?: boolean
+  enabled?: number
   config: Record<string, unknown>
 }
 
@@ -768,7 +768,7 @@ export interface NotifyRuleSaveParams {
   event: NotifyEvent
   channelIds: number[]
   condition?: Record<string, unknown>
-  enabled?: boolean
+  enabled?: number
 }
 
 /** 发送日志出参 */
@@ -796,7 +796,7 @@ export interface NotifyMessage {
   title: string
   content: string
   /** 是否已读 */
-  read: boolean
+  Isread: boolean
   /** 点击跳转的报告/详情 URL */
   linkUrl: string | null
   createTime: string

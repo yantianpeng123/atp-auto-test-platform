@@ -1,6 +1,7 @@
 package com.atp.module.notify.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -23,6 +24,7 @@ public class NotifyLog {
 
     private Long channelId;
 
+    @TableField("`event`")
     private String event;
 
     /** 渠道类型 INAPP/DINGTALK/EMAIL_163，便于前端展示 */

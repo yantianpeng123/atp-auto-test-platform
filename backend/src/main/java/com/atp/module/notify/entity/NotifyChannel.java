@@ -25,6 +25,7 @@ public class NotifyChannel {
     private Long projectId;
 
     /** INAPP / DINGTALK / EMAIL_163 */
+    @TableField("`type`")
     private String type;
 
     private String name;

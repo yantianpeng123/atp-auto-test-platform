@@ -27,12 +27,14 @@ public class NotifyRule {
     private String name;
 
     /** 触发事件：EXEC_DONE / EXEC_FAIL / BATCH_DONE */
+    @TableField("`event`")
     private String event;
 
     /** JSON 数组字符串：[channelId1, channelId2] */
     private String channelIds;
 
     /** JSON 字符串：如 {"onlyFail":true} */
+    @TableField("`condition`")
     private String condition;
 
     /** 0-停用 1-启用 */

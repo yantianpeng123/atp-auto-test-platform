@@ -1,6 +1,7 @@
 package com.atp.module.notify.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -27,7 +28,8 @@ public class NotifyMessage {
     private String content;
 
     /** 0-未读 1-已读 */
-    private Integer read;
+    @TableField("`is_read`")
+    private Integer isread;
 
     /** 点击跳转的报告/详情 URL */
     private String linkUrl;

@@ -21,10 +21,18 @@ import com.atp.module.plan.vo.PlanBatchDetailVO;
 import com.atp.module.plan.vo.PlanBatchRunItemVO;
 import com.atp.module.plan.vo.PlanBatchRunVO;
 import com.atp.module.plan.vo.PlanBatchVO;
+import com.atp.module.notify.event.NotifyEvent;
+import com.atp.module.notify.event.NotifyPayload;
+import com.atp.module.user.entity.User;
+import com.atp.module.user.mapper.UserMapper;
+import com.atp.security.UserPrincipal;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -42,6 +50,7 @@ import java.util.concurrent.Future;
  * 与测试计划的手动/定时执行共用同一套内核，耦合最小。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class PlanBatchServiceImpl implements PlanBatchService {
 
@@ -51,6 +60,8 @@ public class PlanBatchServiceImpl implements PlanBatchService {
     private final PlanBatchRunItemMapper planBatchRunItemMapper;
     private final TestPlanMapper testPlanMapper;
     private final TestPlanService testPlanService;
+    private final UserMapper userMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResult<PlanBatchVO> list(Long projectId, String name, Boolean enabled, long page, long size) {
@@ -272,7 +283,53 @@ public class PlanBatchServiceImpl implements PlanBatchService {
         recountRun(run);
         batch.setLastRunId(run.getId());
         planBatchMapper.updateById(batch);
+
+        // 批次整体执行完成后发布 BATCH_DONE 通知事件（供「批次执行完成」规则触发）
+        publishBatchDone(batch, run);
+
         return toRunVO(run);
+    }
+
+    /** 批次执行完成后发布 BATCH_DONE 事件，供通知中心「批次执行完成」规则使用 */
+    private void publishBatchDone(PlanBatch batch, PlanBatchRun run) {
+        try {
+            Long executorId = currentUserId();
+            String executorName = null;
+            if (executorId != null) {
+                User u = userMapper.selectById(executorId);
+                if (u != null) {
+                    executorName = u.getUsername();
+                }
+            }
+            NotifyPayload p = new NotifyPayload();
+            p.setProjectId(batch.getProjectId());
+            p.setEvent("BATCH_DONE");
+            p.setExecutionId(run.getId());
+            p.setCaseName(batch.getName());
+            p.setStatus(run.getFailed() == null || run.getFailed() == 0 ? "SUCCESS" : "FAILED");
+            p.setTotalRounds(run.getTotal());
+            p.setPassedRounds(run.getPassed());
+            p.setFailedRounds(run.getFailed());
+            p.setExecutorId(executorId);
+            p.setExecutorName(executorName);
+            p.setLinkUrl("/plan/batch/" + batch.getId());
+            eventPublisher.publishEvent(new NotifyEvent(this, p));
+        } catch (Exception e) {
+            log.warn("批次完成通知事件发布失败 batchId={}", batch.getId(), e);
+        }
+    }
+
+    /** 取当前登录用户 ID（无登录上下文时返回 null） */
+    private Long currentUserId() {
+        try {
+            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            if (principal instanceof UserPrincipal up) {
+                return up.getId();
+            }
+        } catch (Exception ignored) {
+            // 非 Web 上下文或尚未认证
+        }
+        return null;
     }
 
     /** 执行单个计划，更新其运行明细，返回是否成功 */

@@ -39,7 +39,7 @@ public class InAppSender implements NotifySender {
             msg.setProjectId(payload.getProjectId());
             msg.setTitle(payload.getTitle());
             msg.setContent(payload.getContent());
-            msg.setRead(0);
+            msg.setIsread(0);
             msg.setLinkUrl(payload.getLinkUrl());
             messageMapper.insert(msg);
         }

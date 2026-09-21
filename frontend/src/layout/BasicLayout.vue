@@ -191,11 +191,11 @@
             v-for="m in messages"
             :key="m.id"
             class="msg-item"
-            :class="{ unread: !m.read }"
+            :class="{ unread: !m.Isread }"
             @click="openMessage(m)"
           >
             <div class="msg-row">
-              <span v-if="!m.read" class="msg-dot" />
+              <span v-if="!m.Isread" class="msg-dot" />
               <span class="msg-title">{{ m.title }}</span>
               <span class="msg-time">{{ m.createTime }}</span>
             </div>
@@ -285,10 +285,10 @@ function openDrawer() {
 
 async function openMessage(m: NotifyMessage) {
   const pid = projectStore.currentProject?.id
-  if (!m.read && pid) {
+  if (!m.Isread && pid) {
     try {
       await markMessagesRead([m.id], pid)
-      m.read = true
+      m.Isread = true
       unreadCount.value = Math.max(0, unreadCount.value - 1)
     } catch {
       // 后端未实现时兜底
@@ -302,7 +302,7 @@ async function markAllRead() {
   if (!pid) return
   try {
     await markMessagesRead('all', pid)
-    messages.value.forEach((m) => (m.read = true))
+    messages.value.forEach((m) => (m.Isread = true))
     unreadCount.value = 0
   } catch {
     // 后端未实现时兜底
