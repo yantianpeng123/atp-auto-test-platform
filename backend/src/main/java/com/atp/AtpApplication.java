@@ -14,7 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @MapperScan("com.atp.module.**.mapper")
 @SpringBootApplication
 public class AtpApplication {
-
+//测试CI
     public static void main(String[] args) {
         SpringApplication.run(AtpApplication.class, args);
     }
