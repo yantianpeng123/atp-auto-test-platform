@@ -49,6 +49,9 @@ public enum ResultCode {
 
     BATCH_NOT_FOUND(3201, "定时任务批次不存在"),
     BATCH_NAME_EXISTS(3201,"定时任务已存在"),
+
+    CI_CONFIG_NOT_FOUND(3301, "CI 配置不存在或未启用"),
+    CI_TOKEN_INVALID(3302, "CI 令牌无效"),
     API_NAME_EXISTS(4001,"请求路径和请求方式已存在"),
 
 

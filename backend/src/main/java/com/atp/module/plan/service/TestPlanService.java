@@ -25,6 +25,9 @@ public interface TestPlanService {
     /** 启/停用定时 */
     void toggleEnabled(Long id, Boolean enabled);
 
-    /** 按计划执行（循环调用用例执行，汇总结果） */
+    /** 按计划执行（循环调用用例执行，汇总结果，使用计划默认环境） */
     PlanExecuteResult executePlan(Long id);
+
+    /** 按计划执行，envId 非空时覆盖计划默认环境（供 CI 触发指定环境） */
+    PlanExecuteResult executePlan(Long id, Long envId);
 }

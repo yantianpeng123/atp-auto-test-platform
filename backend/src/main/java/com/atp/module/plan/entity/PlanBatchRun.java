@@ -23,8 +23,11 @@ public class PlanBatchRun {
     /** 批次ID */
     private Long batchId;
 
-    /** 触发方式 MANUAL / SCHEDULED */
+    /** 触发方式 MANUAL / SCHEDULED / CI */
     private String triggerType;
+
+    /** 执行环境ID（CI 触发可覆盖计划默认环境，缺省为 null） */
+    private Long envId;
 
     /** RUNNING / SUCCESS / PARTIAL_FAILED / FAILED */
     private String status;

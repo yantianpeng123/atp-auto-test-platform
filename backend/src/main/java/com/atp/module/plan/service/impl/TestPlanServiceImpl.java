@@ -197,6 +197,11 @@ public class TestPlanServiceImpl implements TestPlanService {
 
     @Override
     public PlanExecuteResult executePlan(Long id) {
+        return executePlan(id, null);
+    }
+
+    @Override
+    public PlanExecuteResult executePlan(Long id, Long envId) {
         TestPlan plan = testPlanMapper.selectById(id);
         if (plan == null) {
             throw new BizException(ResultCode.PLAN_NOT_FOUND);
@@ -214,12 +219,15 @@ public class TestPlanServiceImpl implements TestPlanService {
         long start = System.currentTimeMillis();
         List<PlanExecuteCaseResult> caseResults = new ArrayList<>();
 
+        // envId 非空时覆盖计划默认环境（CI 触发可指定环境）
+        Long effectiveEnvId = envId != null ? envId : plan.getEnvId();
+
         for (TestPlanCase link : links) {
             PlanExecuteCaseResult cr = new PlanExecuteCaseResult();
             cr.setCaseId(link.getCaseId());
             try {
                 CaseExecuteRequest req = new CaseExecuteRequest();
-                req.setEnvId(plan.getEnvId());
+                req.setEnvId(effectiveEnvId);
                 req.setPlanId(id);
                 req.setDebug(Boolean.FALSE);
                 CaseExecuteVO vo = executeService.executeCase(link.getCaseId(), req);

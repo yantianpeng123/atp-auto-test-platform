@@ -43,7 +43,7 @@ public class PlanBatchScheduler {
                 continue; // 上一次还在跑，跳过本次
             }
             try {
-                planBatchService.executeBatch(batch.getId(), "SCHEDULED");
+                planBatchService.executeBatch(batch.getId(), "SCHEDULED", null);
             } catch (Exception ignored) {
                 // 单个批次失败不影响其他批次
             } finally {

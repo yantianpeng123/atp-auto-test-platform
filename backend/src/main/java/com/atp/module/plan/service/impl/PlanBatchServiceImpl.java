@@ -63,6 +63,9 @@ public class PlanBatchServiceImpl implements PlanBatchService {
     private final UserMapper userMapper;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** CI / 异步触发专用线程池：提交后立即返回 runId，后台线程继续推进批次执行 */
+    private final ExecutorService ciExecutor = Executors.newFixedThreadPool(5);
+
     @Override
     public PageResult<PlanBatchVO> list(Long projectId, String name, Boolean enabled, long page, long size) {
         Page<PlanBatch> p = new Page<>(page, size);
@@ -206,18 +209,52 @@ public class PlanBatchServiceImpl implements PlanBatchService {
     }
 
     @Override
-    public PlanBatchRunVO executeBatch(Long id, String triggerType) {
+    public PlanBatchRunVO executeBatch(Long id, String triggerType, Long envId) {
         PlanBatch batch = planBatchMapper.selectById(id);
         if (batch == null) {
             throw new BizException(ResultCode.BATCH_NOT_FOUND);
         }
-        List<PlanBatchItem> items = planBatchItemMapper.selectList(
-                new QueryWrapper<PlanBatchItem>().eq("batch_id", id).orderByAsc("sort_order"));
+        PlanBatchRun run = createRun(batch, triggerType, envId);
+        executeCore(batch, run, envId);
+        return toRunVO(run);
+    }
 
-        // 运行实例头
+    /**
+     * 异步触发批次执行（供 CI 调用）：先创建运行实例（RUNNING）并立即返回 runId，
+     * 真正的执行提交到后台线程池，避免 CI 调用方 HTTP 超时。
+     */
+    @Override
+    public Long executeBatchAsync(Long id, String triggerType, Long envId) {
+        PlanBatch batch = planBatchMapper.selectById(id);
+        if (batch == null) {
+            throw new BizException(ResultCode.BATCH_NOT_FOUND);
+        }
+        PlanBatchRun run = createRun(batch, triggerType, envId);
+        ciExecutor.submit(() -> {
+            try {
+                executeCore(batch, run, envId);
+            } catch (Exception e) {
+                log.error("异步批次执行异常 batchId={} runId={}", id, run.getId(), e);
+                run.setStatus("FAILED");
+                run.setEndTime(LocalDateTime.now());
+                if (run.getDurationMs() == null && run.getStartTime() != null) {
+                    run.setDurationMs(java.time.Duration.between(run.getStartTime(), run.getEndTime()).toMillis());
+                }
+                planBatchRunMapper.updateById(run);
+            }
+        });
+        return run.getId();
+    }
+
+    /** 创建运行实例头与明细（QUEUED），返回运行实例 */
+    private PlanBatchRun createRun(PlanBatch batch, String triggerType, Long envId) {
+        List<PlanBatchItem> items = planBatchItemMapper.selectList(
+                new QueryWrapper<PlanBatchItem>().eq("batch_id", batch.getId()).orderByAsc("sort_order"));
+
         PlanBatchRun run = new PlanBatchRun();
-        run.setBatchId(id);
+        run.setBatchId(batch.getId());
         run.setTriggerType(triggerType == null ? "MANUAL" : triggerType);
+        run.setEnvId(envId);
         run.setStatus("RUNNING");
         int total = items.size();
         run.setTotal(total);
@@ -228,8 +265,6 @@ public class PlanBatchServiceImpl implements PlanBatchService {
         run.setStartTime(LocalDateTime.now());
         planBatchRunMapper.insert(run);
 
-        // 预创建明细（QUEUED）
-        List<PlanBatchRunItem> runItems = new ArrayList<>();
         for (PlanBatchItem item : items) {
             PlanBatchRunItem ri = new PlanBatchRunItem();
             ri.setRunId(run.getId());
@@ -239,8 +274,14 @@ public class PlanBatchServiceImpl implements PlanBatchService {
             ri.setSortOrder(item.getSortOrder());
             ri.setStatus("QUEUED");
             planBatchRunItemMapper.insert(ri);
-            runItems.add(ri);
         }
+        return run;
+    }
+
+    /** 执行核心：串行/并行跑计划、聚合最终状态、发布 BATCH_DONE 通知事件 */
+    private void executeCore(PlanBatch batch, PlanBatchRun run, Long envId) {
+        List<PlanBatchRunItem> runItems = planBatchRunItemMapper.selectList(
+                new QueryWrapper<PlanBatchRunItem>().eq("run_id", run.getId()).orderByAsc("sort_order"));
 
         boolean parallel = "PARALLEL".equals(batch.getStrategy());
         boolean failContinue = batch.getFailContinue() != null && batch.getFailContinue() == 1;
@@ -253,7 +294,7 @@ public class PlanBatchServiceImpl implements PlanBatchService {
                     markSkipped(ri);
                     continue;
                 }
-                boolean ok = runOne(ri);
+                boolean ok = runOne(ri, envId);
                 if (!ok && !failContinue) {
                     stop = true;
                 }
@@ -265,7 +306,7 @@ public class PlanBatchServiceImpl implements PlanBatchService {
             try {
                 List<Future<?>> futures = new ArrayList<>();
                 for (PlanBatchRunItem ri : runItems) {
-                    futures.add(pool.submit(() -> runOne(ri)));
+                    futures.add(pool.submit(() -> runOne(ri, envId)));
                 }
                 for (Future<?> f : futures) {
                     try {
@@ -286,8 +327,6 @@ public class PlanBatchServiceImpl implements PlanBatchService {
 
         // 批次整体执行完成后发布 BATCH_DONE 通知事件（供「批次执行完成」规则触发）
         publishBatchDone(batch, run);
-
-        return toRunVO(run);
     }
 
     /** 批次执行完成后发布 BATCH_DONE 事件，供通知中心「批次执行完成」规则使用 */
@@ -333,13 +372,13 @@ public class PlanBatchServiceImpl implements PlanBatchService {
     }
 
     /** 执行单个计划，更新其运行明细，返回是否成功 */
-    private boolean runOne(PlanBatchRunItem ri) {
+    private boolean runOne(PlanBatchRunItem ri, Long envId) {
         ri.setStatus("RUNNING");
         ri.setStartTime(LocalDateTime.now());
         planBatchRunItemMapper.updateById(ri);
         boolean success;
         try {
-            PlanExecuteResult res = testPlanService.executePlan(ri.getPlanId());
+            PlanExecuteResult res = testPlanService.executePlan(ri.getPlanId(), envId);
             ri.setStatus("SUCCESS");
             ri.setDurationMs(res.getDurationMs());
             // 取该计划最新一条执行记录作为报告入口（复用 tb_execution）

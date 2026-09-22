@@ -69,10 +69,10 @@ public class PlanBatchController {
         return Result.ok(Boolean.TRUE.equals(enabled) ? "批次已启用" : "批次已停用");
     }
 
-    /** 立即执行批次（手动触发） */
+    /** 立即执行批次（手动触发，使用计划默认环境） */
     @PostMapping("/{id}/execute")
     public Result<PlanBatchRunVO> execute(@PathVariable Long id) {
-        return Result.success(planBatchService.executeBatch(id, "MANUAL"));
+        return Result.success(planBatchService.executeBatch(id, "MANUAL", null));
     }
 
     /** 轮询：获取某次运行的实时状态 */

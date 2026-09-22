@@ -488,7 +488,8 @@ CREATE TABLE `tb_plan_batch_run`
 (
     `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     `batch_id`     BIGINT       NOT NULL COMMENT '批次ID',
-    `trigger_type` VARCHAR(16)  DEFAULT 'MANUAL' COMMENT '触发方式 MANUAL/SCHEDULED',
+    `trigger_type` VARCHAR(16)  DEFAULT 'MANUAL' COMMENT '触发方式 MANUAL/SCHEDULED/CI',
+    `env_id`       BIGINT       DEFAULT NULL COMMENT '执行环境ID（CI触发可覆盖计划默认环境）',
     `status`       VARCHAR(16)  DEFAULT 'RUNNING' COMMENT 'RUNNING/SUCCESS/PARTIAL_FAILED/FAILED',
     `total`        INT          DEFAULT 0 COMMENT '计划总数',
     `passed`       INT          DEFAULT 0 COMMENT '成功数',
@@ -619,3 +620,22 @@ CREATE TABLE `tb_notify_message`
     KEY `idx_project` (`project_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='站内信收件箱表';
+
+DROP TABLE IF EXISTS `tb_ci_config`;
+CREATE TABLE `tb_ci_config`
+(
+    `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `project_id`      BIGINT       NOT NULL COMMENT '项目ID（唯一）',
+    `token_hash`      VARCHAR(100) NOT NULL COMMENT 'CI 令牌 BCrypt 哈希',
+    `default_env_id`  BIGINT       DEFAULT NULL COMMENT '默认执行环境ID',
+    `default_batch_id` BIGINT      DEFAULT NULL COMMENT '默认批次ID',
+    `callback_url`    VARCHAR(500) DEFAULT NULL COMMENT '批次完成回调地址（可选）',
+    `enabled`         TINYINT      DEFAULT 1 COMMENT '是否启用 1-启用 0-停用',
+    `deleted`         TINYINT      DEFAULT 0 COMMENT '逻辑删除 0-有效 1-删除',
+    `create_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_project` (`project_id`),
+    KEY `idx_project` (`project_id`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='CI 集成配置表';

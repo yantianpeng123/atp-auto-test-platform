@@ -33,9 +33,17 @@ public interface PlanBatchService {
      * 落库运行实例与明细，返回实时运行结果。
      *
      * @param id          批次ID
-     * @param triggerType 触发方式 MANUAL / SCHEDULED
+     * @param triggerType 触发方式 MANUAL / SCHEDULED / CI
+     * @param envId       执行环境ID（可空，非空时覆盖计划默认环境）
      */
-    PlanBatchRunVO executeBatch(Long id, String triggerType);
+    PlanBatchRunVO executeBatch(Long id, String triggerType, Long envId);
+
+    /**
+     * 异步触发批次执行（供 CI 调用）：创建运行实例后立即返回 runId，执行在后台线程推进。
+     *
+     * @return 运行实例ID（用于轮询）
+     */
+    Long executeBatchAsync(Long id, String triggerType, Long envId);
 
     /** 轮询：获取某次运行的实时状态（按明细实时聚合计数） */
     PlanBatchRunVO getRun(Long runId);

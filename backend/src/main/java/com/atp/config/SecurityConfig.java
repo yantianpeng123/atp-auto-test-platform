@@ -42,6 +42,8 @@ public class SecurityConfig {
             "/api/auth/login",
             "/api/auth/captcha",
             "/api/user/check-username",
+            "/api/ci/trigger",
+            "/api/ci/result/**",
             "/error"
     };
 
