@@ -1,7 +1,7 @@
 pipeline {
   agent any
   environment {
-    ATP_BASE   = 'http://localhost:8080'      // Docker 起的 Jenkins 用 http://host.docker.internal:8080
+    ATP_BASE   = 'http://host.docker.internal:8080'      // Docker 起的 Jenkins 用 http://host.docker.internal:8080
     PROJECT_ID = '3'
     BATCH_ID   = '2'
     ATP_TOKEN  = credentials('atp-ci-token')   // 在 Jenkins Credentials 里建的 Secret text
