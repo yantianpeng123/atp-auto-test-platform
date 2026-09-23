@@ -77,7 +77,7 @@ pipeline {
             -o atp-report.xml || true
         '''
       }
-      junit 'atp-report.xml', allowEmptyResults: true
+      junit testResults: 'atp-report.xml', allowEmptyResults: true
     }
   }
 }
