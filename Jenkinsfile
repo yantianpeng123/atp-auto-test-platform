@@ -12,7 +12,10 @@ pipeline {
         script {
           def trigResp = sh(script: "curl -s -X POST ${ATP_BASE}/api/ci/trigger -H 'X-CI-Token: ${ATP_TOKEN}' -H 'Content-Type: application/json' -d '{\"projectId\":${PROJECT_ID},\"batchId\":${BATCH_ID}}'", returnStdout: true).trim()
           echo "trigger resp: ${trigResp}"
-          def trig = new groovy.json.JsonSlurperClassic().parseText(trigResp)
+          //def trig = new groovy.json.JsonSlurperClassic().parseText(trigResp)
+          echo "trigger resp: ========222222========"
+          def trig = readJSON text: trigResp
+          echo "trigger resp: ==========111111======"
           def runId = trig.data.runId
           echo "runId=${runId}"
           env.RUN_ID = runId.toString()
