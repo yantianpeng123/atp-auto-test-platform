@@ -42,7 +42,7 @@ pipeline {
                 def resResp = withEnv(["RUN_ID=${runId}"]) {
                   sh(
                     script: '''
-                      echo ">>> GET $ATP_BASE/api/ci/result/$RUN_ID"
+                      echo ">>> GET $ATP_BASE/api/ci/result/$RUN_ID">&2
                       curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
                         -H "X-CI-Token: $ATP_TOKEN"
                     ''',
@@ -57,10 +57,22 @@ pipeline {
                 def failed = res.data?.failed ?: 0
                 echo "status=${status} passed=${passed} failed=${failed}"
 
-                if (status == 'FAILED' || (failed as int) > 0) {
+                if (status in ['FAILED', 'PARTIAL_FAILED']  || (failed as int) > 0) {
                   error("ATP 回归失败: 通过 ${passed} / 失败 ${failed}")
                 }
               }
+              stage('Fetch JUnit report & publish') {
+                    steps {
+                      withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
+                        sh '''
+                          curl -s "$ATP_BASE/api/ci/report/$RUN_ID.xml" \
+                            -H "X-CI-Token: $ATP_TOKEN" \
+                            -o atp-report.xml
+                        '''
+                      }
+                      junit 'atp-report.xml'
+                    }
+                  }
             }
           }
         }
