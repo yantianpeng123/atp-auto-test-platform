@@ -66,7 +66,6 @@ pipeline {
          }
       }
     }
-  }
 }
 
 // 在 @NonCPS 方法里解析 JSON，并递归转换为可序列化的 HashMap/ArrayList
