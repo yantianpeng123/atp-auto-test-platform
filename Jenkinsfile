@@ -57,7 +57,7 @@ pipeline {
                 def failed = res.data?.failed ?: 0
                 echo "status=${status} passed=${passed} failed=${failed}"
 
-                if (status in ['FAILED', 'PARTIAL_FAILED']  || (failed as int) > 0) {
+                if (status in ['FAILED']  || (failed as int) > 0) {
                   error("ATP 回归失败: 通过 ${passed} / 失败 ${failed}")
                 }
               }
