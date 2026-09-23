@@ -33,7 +33,7 @@ pipeline {
             timeout(time: 30, unit: 'MINUTES') {
               while (status == 'RUNNING') {
                 sleep 10
-                def resResp = = withEnv(["RUN_ID=${runId}"]){
+                def resResp =  withEnv(["RUN_ID=${runId}"]){
                 sh(
                   script: '''
                     curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
