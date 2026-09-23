@@ -173,3 +173,71 @@ Jenkins 侧跑通的前提是 **ATP 平台已实现 CI 入站接口**，核心�
 | Stage Step Failure + `python3: command not found` | 容器无 python3 | 改用 Groovy `JsonSlurper` 解析（步骤 2 已修正，无需改脚本） |
 | Stage Step Failure + `JsonSlurper` 抛异常 / 返回 HTML | 平台 `/api/ci/*` 未实现（404） | 该阶段前置未满足，先只跑 Smoke 阶段；待平台接口就绪再用 |
 | Stage 红但无明细 | 未看 Console Output | 点失败阶段 → Logs，第一行即根因 |
+
+---
+
+## 九、配置「代码推送自动触发」流水线（Build Triggers + Webhook）
+
+> 第四节的 Pipeline 之前是手动点 **Build Now**。要让 push / merge 自动跑，需要在**两处**配合：Jenkins 任务里的「构建触发器」 + 代码仓库里的「Webhook」（或改用轮询，无需公网）。
+
+### 9.1 Jenkins 任务里要配的 3 处
+1. **Pipeline → Definition 选 `Pipeline script from SCM`**（关键）：Pipeline 类型任务**没有顶部独立的「Source Code Management」区块**，Git 配置就藏在 Pipeline 定义里。把 Definition 从默认的 `Pipeline script` 改成 `Pipeline script from SCM` 后，区块内才会出现 **Git** 的 SCM 配置（Repository URL + 凭据 + Branch）。
+   > 注意：如果 Jenkinsfile 是内联脚本（直接 curl 调 ATP、不需要仓库代码），**可以跳过这一步**，保持 `Pipeline script` 即可——Webhook / 定时触发照样能工作。只有当 Jenkinsfile 放在仓库里管理时才需要配 Git。
+2. **Build Triggers**（按仓库类型选一种）：
+   - **GitHub 仓库**：勾选 **GitHub hook trigger for GITScm polling**（需装 `GitHub` 插件，推荐插件集已含）。
+   - **GitLab 仓库**：勾选 **Build when a change is pushed to GitLab**（需装 `GitLab` 插件，并在「高级」里生成 Secret token）。
+   - **不想把 Jenkins 暴露到公网**：勾选 **Poll SCM**，填 cron 如 `*/5 * * * *`（每 5 分钟查一次，有延迟但无需公网可达）。
+3. **Global Credentials 里的 `atp-ci-token`**（第五节已建，这里复用）：Jenkinsfile 用 `credentials('atp-ci-token')` 引用，无需改动。
+
+### 9.2 代码仓库里加 Webhook（仅 Webhook 方式需要）
+- **GitHub**：仓库 **Settings → Webhooks → Add webhook** → Payload URL 填 `http://<jenkins地址>/github-webhook/`（注意结尾斜杠）→ Content type 选 `application/json` → Which events 选 **Push**（PR / merge 按需再加）→ Add webhook。
+- **GitLab**：项目 **Settings → Webhooks** → URL 填 `http://<jenkins>/project/<任务名>` → 勾选 **Push events**（Merge 按需）→ Secret token 填与 9.1 生成的一致 → Add webhook。
+
+### 9.3 关键前提：Jenkins 必须能被仓库访问到
+- GitHub / GitLab 在云端，若 Jenkins 跑在本机 `localhost:9000`，云端仓库**访问不到**，Webhook 永远不会触发。
+- 解决三选一：
+  1. **内网穿透**（ngrok / cloudflared）给 Jenkins 一个公网 URL，Webhook 填这个地址。
+  2. 改用 **Poll SCM**（9.1 第 2 点），无需公网，接受几分钟延迟。
+  3. Jenkins 与仓库同处一个可达内网 / VPN。
+
+### 9.4 验证
+- **Webhook 方式**：push 一次分支，回 Jenkins 看任务是否自动出现新 Build；仓库 Webhooks 页可看 Recent Deliveries 状态（200 = 成功）。
+- **Poll SCM 方式**：等一个 cron 周期（如 5 分钟）看是否自动触发。
+- Console Output 第一行应是拉取代码，随后进入 **Trigger ATP regression** 阶段。
+
+---
+
+## 十、内联脚本 + GitHub Webhook 最简触发清单（照勾即可）
+
+> 适用：Jenkinsfile 直接 `curl` 调 ATP，不需要拉仓库代码。全程内联，最省事。
+
+### 10.1 Jenkins 侧（任务 Configure 页，逐项勾）
+- [ ] **New Item**：任务名自取（如 `atp-regression`）→ 类型选 **Pipeline** → OK
+- [ ] **General**：默认，无需改动
+- [ ] **Build Triggers**：勾 **GitHub hook trigger for GITScm polling**
+- [ ] **Pipeline 区块（页面最底部）**：
+  - Definition 选 **Pipeline script**
+  - Script 框粘贴平台「CI 集成」页的示例 Jenkinsfile（或本文第四节步骤 2 脚本）
+  - 核对 environment：`ATP_BASE`=平台地址、`PROJECT_ID`/`BATCH_ID`=对应 ID、`ATP_TOKEN = credentials('atp-ci-token')`
+- [ ] 点 **Save**
+
+### 10.2 GitHub 侧（仓库 Webhooks）
+- [ ] 仓库 **Settings → Webhooks → Add webhook**
+- [ ] Payload URL：`http://<jenkins公网地址>/github-webhook/`（**结尾斜杠必带**）
+- [ ] Content type：`application/json`
+- [ ] Which events：选 **Push**（PR / merge 按需再加）
+- [ ] 勾 **Active** → **Add webhook**
+
+### 10.3 前提：Jenkins 必须公网可达
+- 本地 `localhost:9000` 云端仓库访问不到 → 用 **ngrok / cloudflared** 穿透，Webhook 填穿透后的地址。
+- 不想穿透：把 10.1 的 Build Triggers 换成 **Poll SCM**，cron 填 `*/5 * * * *`，GitHub 侧省略 10.2。
+
+### 10.4 潜在坑：内联脚本 + GitHub hook 可能不触发
+GitHub plugin 的触发器最稳的匹配前提是任务配了 Git SCM。若按 10.1 用纯内联脚本、未配 SCM，部分版本下 Webhook 收得到但任务不自动跑。两个零成本备选：
+- **备选 1（推荐，最通用）**：装 **Generic Webhook Trigger** 插件，Build Triggers 勾它并设 Token（如 `atp`），GitHub Webhook URL 改成 `http://<jenkins>/generic-webhook-trigger/invoke?token=atp`。不依赖 SCM，任意仓库都能触发。
+- **备选 2**：把 Definition 改成 `Pipeline script from SCM`，把 Jenkinsfile 提交进仓库并配好 Git（第九节 9.1 第 1 点），GitHub hook 即可 100% 匹配。
+
+### 10.5 验证
+- push 一次分支 → 回 Jenkins 看任务是否自动冒出 Build。
+- Console Output 进入 **Trigger ATP regression** 阶段 = 触发成功。
+- GitHub Webhooks → Recent Deliveries 显示 200 = Webhook 已送达。

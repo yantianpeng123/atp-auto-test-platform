@@ -83,6 +83,10 @@
             <el-icon><Bell /></el-icon>
             <span>通知配置</span>
           </el-menu-item>
+          <el-menu-item index="/ci/config">
+            <el-icon><Connection /></el-icon>
+            <span>CI 集成</span>
+          </el-menu-item>
         </el-sub-menu>
       </el-menu>
 
@@ -230,7 +234,8 @@ import {
   SwitchButton,
   Timer,
   VideoPlay,
-  Clock
+  Clock,
+  Connection
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useUserStore } from '@/stores/user'
@@ -313,12 +318,13 @@ const activePath = computed(() => {
   if (route.path.startsWith('/case')) return '/case'
   if (route.path.startsWith('/batch')) return '/batch'
   if (route.path.startsWith('/base')) return route.path
+  if (route.path.startsWith('/ci')) return '/ci/config'
   return route.path
 })
 
 const defaultOpeneds = computed(() => {
   const path = route.path
-  if (path.startsWith('/project') || path.startsWith('/notify')) return ['project']
+  if (path.startsWith('/project') || path.startsWith('/notify') || path.startsWith('/ci')) return ['project']
   if (path.startsWith('/base')) return ['base']
   if (path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
   if (path.startsWith('/plan') || path.startsWith('/report') || path.startsWith('/batch')) return ['run']

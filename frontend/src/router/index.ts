@@ -116,6 +116,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'NotifyConfig',
         component: () => import('@/views/notify/config.vue'),
         meta: { title: '通知配置', icon: 'Bell' }
+      },
+      {
+        path: 'ci/config',
+        name: 'CiConfig',
+        component: () => import('@/views/ci/config.vue'),
+        meta: { title: 'CI 集成', icon: 'Connection' }
       }
     ]
   },

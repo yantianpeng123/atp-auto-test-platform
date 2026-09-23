@@ -801,3 +801,44 @@ export interface NotifyMessage {
   linkUrl: string | null
   createTime: string
 }
+
+/**
+ * CI 集成配置（与后端 /api/ci/config/** 对齐）
+ */
+
+/** CI 配置出参（token 仅在「新建 / 重新生成」时返回一次明文，之后查询为 null） */
+export interface CiConfig {
+  /** 配置ID（未配置时为 null） */
+  id: number | null
+  projectId: number
+  /** 默认执行环境ID */
+  defaultEnvId: number | null
+  /** 默认批次ID */
+  defaultBatchId: number | null
+  /** 批次完成回调地址（可选） */
+  callbackUrl: string | null
+  /** 1 启用 / 0 停用（未配置时为 null） */
+  enabled: number | null
+  /** 一次性明文令牌（仅新建/重新生成时非空） */
+  token: string | null
+  /** 令牌后缀提示（如 ...a1b2），便于在无明文时辨认 */
+  tokenHint: string | null
+  createTime: string | null
+  updateTime: string | null
+}
+
+/** CI 配置保存入参（新增/更新；令牌由后端生成，不在请求体中传入） */
+export interface CiConfigSaveParams {
+  /** 配置ID（更新时传入，新增时留空） */
+  id?: number
+  /** 项目ID（必填） */
+  projectId: number
+  /** 默认执行环境ID */
+  defaultEnvId?: number | null
+  /** 默认批次ID */
+  defaultBatchId?: number | null
+  /** 批次完成回调地址（可选） */
+  callbackUrl?: string | null
+  /** 是否启用：true 启用（新建时由后端强制置 1） */
+  enabled?: boolean | null
+}

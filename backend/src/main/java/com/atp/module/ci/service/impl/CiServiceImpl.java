@@ -148,10 +148,8 @@ public class CiServiceImpl implements CiService {
     public CiConfigVO getConfig(Long projectId) {
         CiConfig config = ciConfigMapper.selectOne(
                 new QueryWrapper<CiConfig>().eq("project_id", projectId).eq("deleted", 0));
-        if (config == null) {
-            throw new BizException(ResultCode.CI_CONFIG_NOT_FOUND);
-        }
-        return toVO(config, null);
+        // 未配置时返回 null（而非抛错），前端据此呈现「尚未启用」的初始态，避免首屏错误提示
+        return config == null ? null : toVO(config, null);
     }
 
     @Override
