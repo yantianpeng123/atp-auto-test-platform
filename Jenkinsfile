@@ -72,7 +72,9 @@ pipeline {
   }
   stage('Maven Build') {
         steps {
+          dir("backend"){
           sh 'mvn clean package -DskipTests'
+          }
         }
       }
       stage('Build Image') {
