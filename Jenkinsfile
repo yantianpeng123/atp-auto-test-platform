@@ -33,7 +33,8 @@ pipeline {
             timeout(time: 30, unit: 'MINUTES') {
               while (status == 'RUNNING') {
                 sleep 10
-                def resResp = sh(
+                def resResp = = withEnv(["RUN_ID=${runId}"]){
+                sh(
                   script: '''
                     curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
                       -H "X-CI-Token: $ATP_TOKEN"
@@ -41,6 +42,7 @@ pipeline {
                   returnStdout: true,
                   env: [RUN_ID: "${runId}"]
                 ).trim()
+                }
                 def res = parseJson(resResp)
 
                 status = res.data?.status ?: res.status
