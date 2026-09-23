@@ -83,6 +83,7 @@ pipeline {
 }
 
 // @NonCPS 方法定义在 pipeline 块外部
+//测试jeknins集成CI
 @NonCPS
 def parseJson(String text) {
   def obj = new groovy.json.JsonSlurper().parseText(text)
