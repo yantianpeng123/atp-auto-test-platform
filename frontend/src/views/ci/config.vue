@@ -288,20 +288,15 @@ const JENKINSFILE_TEMPLATE = `pipeline {
                             status = json.data.status
                             echo "轮询 #\${i + 1}: status=\${status} passed=\${json.data.passed} failed=\${json.data.failed}"
                         }
-                        if (status == 'RUNNING') {
+                        if (status == 'SUCCESS') {
+                            currentBuild.result = 'SUCCESS'
+                        } else if (status in ['FAILED', 'PARTIAL_FAILED']) {
+                            currentBuild.result = 'FAILURE'
+                        } else {
                             error("CI 执行超时未完成，请到平台查看 runId=\${env.RUN_ID}")
                         }
-                        // 拉取 JUnit 报告并交给 Jenkins 原生 junit 步骤渲染（含用例级与步骤断言明细）
-                        httpRequest(
-                            url: "\${params.ATP_BASE_URL}/ci/report/\${env.RUN_ID}.xml",
-                            httpMode: 'GET',
-                            customHeaders: [[name: 'X-CI-Token', value: env.ATP_TOKEN]],
-                            outputFile: 'atp-report.xml'
-                        )
                     }
                 }
-                // 原生 junit 步骤：自动渲染测试报告、判定红绿（无需手写轮询判定）
-                junit 'atp-report.xml'
             }
         }
     }
@@ -315,11 +310,7 @@ curl -X POST '{{BASE_URL}}/ci/trigger' \\
 
 # 2) 轮询执行结果（status=SUCCESS 表示全部通过；PARTIAL_FAILED / FAILED 表示存在失败）
 curl -X GET '{{BASE_URL}}/ci/result/<runId>' \\
-  -H "X-CI-Token: $ATP_CI_TOKEN"
-
-# 3) 拉取 JUnit 格式 XML 报告（供 CI 的 junit 步骤解析，含用例级与步骤断言明细）
-curl -X GET '{{BASE_URL}}/ci/report/<runId>.xml' \\
-  -H "X-CI-Token: $ATP_CI_TOKEN" -o atp-report.xml`
+  -H "X-CI-Token: $ATP_CI_TOKEN"`
 
 function fillTemplate(tpl: string): string {
   const base = baseUrl.value.replace(/\/+$/, '')

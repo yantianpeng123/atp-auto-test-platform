@@ -13,17 +13,7 @@ import com.atp.module.ci.vo.CiTriggerResultVO;
 import com.atp.module.plan.entity.PlanBatch;
 import com.atp.module.plan.mapper.PlanBatchMapper;
 import com.atp.module.plan.service.PlanBatchService;
-import com.atp.module.execute.entity.ExecutionAssertion;
-import com.atp.module.execute.entity.ExecutionDetail;
-import com.atp.module.execute.mapper.ExecutionAssertionMapper;
-import com.atp.module.execute.mapper.ExecutionDetailMapper;
-import com.atp.module.plan.entity.PlanBatchRun;
-import com.atp.module.plan.entity.PlanBatchRunItem;
-import com.atp.module.plan.mapper.PlanBatchRunItemMapper;
-import com.atp.module.plan.mapper.PlanBatchRunMapper;
 import com.atp.module.plan.vo.PlanBatchRunVO;
-import com.atp.module.testcase.entity.TestCase;
-import com.atp.module.testcase.mapper.TestCaseMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,11 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * CI 集成服务实现。
@@ -53,11 +39,6 @@ public class CiServiceImpl implements CiService {
     private final PlanBatchMapper planBatchMapper;
     private final PlanBatchService planBatchService;
     private final PasswordEncoder passwordEncoder;
-    private final PlanBatchRunMapper planBatchRunMapper;
-    private final PlanBatchRunItemMapper planBatchRunItemMapper;
-    private final ExecutionDetailMapper executionDetailMapper;
-    private final ExecutionAssertionMapper executionAssertionMapper;
-    private final TestCaseMapper testCaseMapper;
 
     @Override
     public CiTriggerResultVO trigger(CiTriggerRequest req, String token) {
@@ -94,8 +75,20 @@ public class CiServiceImpl implements CiService {
 
     @Override
     public CiResultVO getResult(Long runId, String token) {
-        checkToken(runId, token);
+        if (token == null || token.isBlank()) {
+            throw new BizException(ResultCode.CI_TOKEN_INVALID, "缺少 CI 令牌");
+        }
         PlanBatchRunVO vo = planBatchService.getRun(runId);
+
+        PlanBatch batch = planBatchMapper.selectById(vo.getBatchId());
+        if (batch == null) {
+            throw new BizException(ResultCode.BATCH_NOT_FOUND);
+        }
+        CiConfig config = ciConfigMapper.selectOne(
+                new QueryWrapper<CiConfig>().eq("project_id", batch.getProjectId()).eq("deleted", 0));
+        if (config == null || !passwordEncoder.matches(token, config.getTokenHash())) {
+            throw new BizException(ResultCode.CI_TOKEN_INVALID, "CI 令牌无效");
+        }
 
         List<Object> items = vo.getItems() != null ? new ArrayList<>(vo.getItems()) : null;
         return CiResultVO.builder()
@@ -170,194 +163,6 @@ public class CiServiceImpl implements CiService {
         config.setTokenHash(passwordEncoder.encode(plainToken));
         ciConfigMapper.updateById(config);
         return toVO(config, plainToken);
-    }
-
-    /** 校验 run 存在且调用方持有合法 CI 令牌（按 run → batch → project → CiConfig 链路核对） */
-    private void checkToken(Long runId, String token) {
-        if (token == null || token.isBlank()) {
-            throw new BizException(ResultCode.CI_TOKEN_INVALID, "缺少 CI 令牌");
-        }
-        PlanBatchRun run = planBatchRunMapper.selectById(runId);
-        if (run == null) {
-            throw new BizException(ResultCode.NOT_FOUND, "运行实例不存在");
-        }
-        PlanBatch batch = planBatchMapper.selectById(run.getBatchId());
-        if (batch == null) {
-            throw new BizException(ResultCode.BATCH_NOT_FOUND);
-        }
-        CiConfig config = ciConfigMapper.selectOne(
-                new QueryWrapper<CiConfig>().eq("project_id", batch.getProjectId()).eq("deleted", 0));
-        if (config == null || !passwordEncoder.matches(token, config.getTokenHash())) {
-            throw new BizException(ResultCode.CI_TOKEN_INVALID, "CI 令牌无效");
-        }
-    }
-
-    /**
-     * 生成 JUnit 格式 XML 报告：
-     * 外层 testsuite 对应「用例」（name/状态/耗时/错误），内层 testcase 对应「步骤」，
-     * 步骤的 failure 节点内展开每条断言明细（类型/操作符/期望/实际/原因）。
-     */
-    @Override
-    public String buildReportXml(Long runId, String token) {
-        checkToken(runId, token);
-
-        PlanBatchRun run = planBatchRunMapper.selectById(runId);
-        PlanBatch batch = planBatchMapper.selectById(run.getBatchId());
-        String rootName = batch != null && batch.getName() != null ? batch.getName() : ("run-" + runId);
-
-        List<PlanBatchRunItem> items = planBatchRunItemMapper.selectList(
-                new QueryWrapper<PlanBatchRunItem>().eq("run_id", runId));
-        List<Long> execIds = items.stream()
-                .map(PlanBatchRunItem::getExecutionId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
-
-        if (execIds.isEmpty()) {
-            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                    + "<testsuites name=\"" + esc("批次: " + rootName + " (run " + runId + ")")
-                    + "\" tests=\"0\" failures=\"0\" time=\"0.000\"></testsuites>\n";
-        }
-
-        List<ExecutionDetail> details = executionDetailMapper.selectList(
-                new QueryWrapper<ExecutionDetail>()
-                        .in("execution_id", execIds)
-                        .orderByAsc("case_id").orderByAsc("round_index").orderByAsc("step_index"));
-        List<ExecutionAssertion> assertions = executionAssertionMapper.selectList(
-                new QueryWrapper<ExecutionAssertion>().in("execution_id", execIds));
-        Map<Long, List<ExecutionAssertion>> assertByDetail = assertions.stream()
-                .collect(Collectors.groupingBy(ExecutionAssertion::getDetailId));
-
-        Map<Long, List<ExecutionDetail>> byCase = details.stream()
-                .collect(Collectors.groupingBy(
-                        d -> d.getCaseId() == null ? -1L : d.getCaseId(),
-                        LinkedHashMap::new, Collectors.toList()));
-
-        Map<Long, String> caseNameCache = new java.util.HashMap<>();
-
-        StringBuilder caseSuites = new StringBuilder();
-        int totalSteps = 0;
-        int totalFailures = 0;
-        double totalTimeSec = 0.0;
-
-        for (Map.Entry<Long, List<ExecutionDetail>> en : byCase.entrySet()) {
-            Long caseId = en.getKey();
-            List<ExecutionDetail> steps = en.getValue();
-
-            String caseName = caseNameCache.computeIfAbsent(caseId, cid -> {
-                if (cid == null || cid == -1L) {
-                    return "未归类步骤";
-                }
-                TestCase tc = testCaseMapper.selectById(cid);
-                return tc != null && tc.getName() != null ? tc.getName() : ("用例#" + cid);
-            });
-
-            StringBuilder stepCases = new StringBuilder();
-            int caseSteps = 0;
-            int caseFailures = 0;
-            double caseTimeSec = 0.0;
-
-            for (ExecutionDetail d : steps) {
-                caseSteps++;
-                totalSteps++;
-                double stepSec = (d.getDurationMs() == null ? 0 : d.getDurationMs()) / 1000.0;
-                caseTimeSec += stepSec;
-                totalTimeSec += stepSec;
-
-                String stepName = d.getStepName() == null ? ("步骤#" + d.getStepId()) : d.getStepName();
-                if (d.getRoundIndex() != null && d.getRoundIndex() > 1) {
-                    stepName += " (第" + d.getRoundIndex() + "轮)";
-                }
-
-                List<ExecutionAssertion> ads = assertByDetail.get(d.getId());
-                boolean hasFailedAssert = ads != null && ads.stream()
-                        .anyMatch(a -> a.getPassed() == null || a.getPassed() == 0);
-                boolean stepFailed = "FAILED".equals(d.getStatus())
-                        || "ERROR".equals(d.getStatus()) || hasFailedAssert;
-
-                stepCases.append("    <testcase name=\"").append(esc(stepName)).append("\" time=\"")
-                        .append(fmt(stepSec)).append("\">");
-                if (stepFailed) {
-                    caseFailures++;
-                    totalFailures++;
-                    stepCases.append("<failure message=\"").append(esc(buildFailureMessage(d, ads)))
-                            .append("\" type=\"AssertionFailed\">")
-                            .append(esc(buildFailureDetail(d, ads))).append("</failure>");
-                }
-                stepCases.append("</testcase>\n");
-            }
-
-            caseSuites.append("  <testsuite name=\"").append(esc(caseName)).append("\" tests=\"")
-                    .append(caseSteps).append("\" failures=\"").append(caseFailures)
-                    .append("\" time=\"").append(fmt(caseTimeSec)).append("\">\n")
-                    .append(stepCases)
-                    .append("  </testsuite>\n");
-        }
-
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<testsuites name=\"" + esc("批次: " + rootName + " (run " + runId + ")")
-                + "\" tests=\"" + totalSteps + "\" failures=\"" + totalFailures
-                + "\" time=\"" + fmt(totalTimeSec) + "\">\n"
-                + caseSuites
-                + "</testsuites>\n";
-    }
-
-    private String buildFailureMessage(ExecutionDetail d, List<ExecutionAssertion> ads) {
-        if (d.getErrorMsg() != null && !d.getErrorMsg().isBlank()) {
-            String m = d.getErrorMsg();
-            return m.length() > 200 ? m.substring(0, 200) : m;
-        }
-        if (ads != null) {
-            for (ExecutionAssertion a : ads) {
-                if (a.getPassed() == null || a.getPassed() == 0) {
-                    return a.getMessage() != null ? a.getMessage()
-                            : ("断言失败: " + a.getType() + " " + a.getOperator());
-                }
-            }
-        }
-        return "步骤状态: " + (d.getStatus() == null ? "UNKNOWN" : d.getStatus());
-    }
-
-    private String buildFailureDetail(ExecutionDetail d, List<ExecutionAssertion> ads) {
-        StringBuilder sb = new StringBuilder();
-        if (ads != null) {
-            for (ExecutionAssertion a : ads) {
-                if (a.getPassed() != null && a.getPassed() == 1) {
-                    continue;
-                }
-                sb.append("[").append(a.getType() == null ? "" : a.getType());
-                if (a.getPath() != null && !a.getPath().isBlank()) {
-                    sb.append(" ").append(a.getPath());
-                }
-                sb.append("] ").append(a.getOperator() == null ? "" : a.getOperator())
-                        .append(" expected=").append(a.getExpected() == null ? "" : a.getExpected())
-                        .append(" actual=").append(a.getActual() == null ? "" : a.getActual());
-                if (a.getMessage() != null && !a.getMessage().isBlank()) {
-                    sb.append(" (").append(a.getMessage()).append(")");
-                }
-                sb.append("\n");
-            }
-        }
-        if (sb.length() == 0) {
-            if (d.getErrorMsg() != null && !d.getErrorMsg().isBlank()) {
-                sb.append(d.getErrorMsg());
-            } else {
-                sb.append("步骤状态: ").append(d.getStatus() == null ? "UNKNOWN" : d.getStatus());
-            }
-        }
-        return sb.toString().trim();
-    }
-
-    private static String esc(String s) {
-        if (s == null) {
-            return "";
-        }
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("'", "&apos;");
-    }
-
-    private static String fmt(double v) {
-        return String.format("%.3f", v);
     }
 
     private CiConfigVO toVO(CiConfig c, String plainToken) {
