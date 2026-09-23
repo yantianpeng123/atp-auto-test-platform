@@ -10,6 +10,7 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
           script {
+            // 1. 触发回归
             def trigResp = sh(
               script: '''
                 curl -s -X POST "$ATP_BASE/api/ci/trigger" \
@@ -29,22 +30,28 @@ pipeline {
               error("触发失败，未获取到 runId。响应: ${trigResp}")
             }
 
+            // 关键：把 runId 写回全局 env，供后续 stage 使用
+            env.RUN_ID = runId.toString()
+
+            // 2. 轮询结果
             def status = 'RUNNING'
             timeout(time: 30, unit: 'MINUTES') {
               while (status == 'RUNNING') {
                 sleep 10
-                def resResp =  withEnv(["RUN_ID=${runId}"]){
-                sh(
-                  script: '''
-                    curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
-                      -H "X-CI-Token: $ATP_TOKEN"
-                  ''',
-                  returnStdout: true,
-                  env: [RUN_ID: "${runId}"]
-                ).trim()
-                }
-                def res = parseJson(resResp)
 
+                def resResp = withEnv(["RUN_ID=${runId}"]) {
+                  sh(
+                    script: '''
+                      echo ">>> GET $ATP_BASE/api/ci/result/$RUN_ID"
+                      curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
+                        -H "X-CI-Token: $ATP_TOKEN"
+                    ''',
+                    returnStdout: true
+                  ).trim()
+                }
+                echo "result resp: ${resResp}"
+
+                def res = parseJson(resResp)
                 status = res.data?.status ?: res.status
                 def passed = res.data?.passed ?: 0
                 def failed = res.data?.failed ?: 0
@@ -57,18 +64,25 @@ pipeline {
             }
           }
         }
-         stage('Fetch JUnit report & publish') {
-         steps{
-            withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
-                      sh "curl -s ${ATP_BASE}/api/ci/report/${env.RUN_ID}.xml -H 'X-CI-Token: ${ATP_TOKEN}' -o atp-report.xml"
-         }
-          junit 'atp-report.xml'
-         }
       }
     }
+
+    stage('Fetch JUnit report & publish') {
+      steps {
+        withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
+          sh '''
+            curl -s "$ATP_BASE/api/ci/report/$RUN_ID.xml" \
+              -H "X-CI-Token: $ATP_TOKEN" \
+              -o atp-report.xml
+          '''
+        }
+        junit 'atp-report.xml'
+      }
+    }
+  }
 }
 
-// 在 @NonCPS 方法里解析 JSON，并递归转换为可序列化的 HashMap/ArrayList
+// @NonCPS 方法定义在 pipeline 块外部
 @NonCPS
 def parseJson(String text) {
   def obj = new groovy.json.JsonSlurper().parseText(text)
