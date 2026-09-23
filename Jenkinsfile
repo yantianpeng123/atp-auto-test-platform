@@ -35,7 +35,7 @@ pipeline {
                 sleep 10
                 def resResp = sh(
                   script: '''
-                    curl -s "$ATP_BASE/api/ci/result/${runId}" \
+                    curl -s "$ATP_BASE/api/ci/result/$RUN_ID" \
                       -H "X-CI-Token: $ATP_TOKEN"
                   ''',
                   returnStdout: true,
