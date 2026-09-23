@@ -103,7 +103,7 @@ pipeline {
         script {
           def trigResp = sh(script: "curl -s -X POST ${ATP_BASE}/api/ci/trigger -H 'X-CI-Token: ${ATP_TOKEN}' -H 'Content-Type: application/json' -d '{\"projectId\":${PROJECT_ID},\"batchId\":${BATCH_ID}}'", returnStdout: true).trim()
           echo "trigger resp: ${trigResp}"
-          def trig = new groovy.json.JsonSlurper().parseText(trigResp)
+          def trig = new groovy.json.JsonSlurperClassic().parseText(trigResp)
           def runId = trig.runId
           echo "runId=${runId}"
           env.RUN_ID = runId.toString()
@@ -112,7 +112,7 @@ pipeline {
             while (status == 'RUNNING') {
               sleep 10
               def resResp = sh(script: "curl -s ${ATP_BASE}/api/ci/result/${runId} -H 'X-CI-Token: ${ATP_TOKEN}'", returnStdout: true).trim()
-              def res = new groovy.json.JsonSlurper().parseText(resResp)
+              def res = new groovy.json.JsonSlurperClassic().parseText(resResp)
               status = res.status
               echo "status=${status} passed=${res.passed ?: 0} failed=${res.failed ?: 0}"
             }
@@ -180,6 +180,7 @@ Jenkins 侧跑通的前提是 **ATP 平台已实现 CI 入站接口**，核心�
 | Stage Step Failure + `python3: command not found` | 容器无 python3 | 改用 Groovy `JsonSlurper` 解析（步骤 2 已修正，无需改脚本） |
 | Stage Step Failure + `JsonSlurper` 抛异常 / 返回 HTML | 平台 `/api/ci/*` 未实现（404） | 该阶段前置未满足，先只跑 Smoke 阶段；待平台接口就绪再用 |
 | Stage 红但无明细 | 未看 Console Output | 点失败阶段 → Logs，第一行即根因 |
+| `NotSerializableException: groovy.json.internal.LazyMap` | Pipeline 在 `sleep` 等步骤边界序列化闭包时，撞上 `JsonSlurper` 返回的 LazyMap（不可序列化） | 把所有 `new groovy.json.JsonSlurper()` 换成 `new groovy.json.JsonSlurperClassic()`；`httpRequest` 响应只取 `.content`（字符串），不要保留整个响应对象跨步骤 |
 
 ---
 
