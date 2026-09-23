@@ -264,7 +264,7 @@ const JENKINSFILE_TEMPLATE = `pipeline {
                             customHeaders: [[name: 'X-CI-Token', value: env.ATP_TOKEN]],
                             body: groovy.json.JsonOutput.toJson(body)
                         )
-                        def json = new groovy.json.JsonSlurper().parseText(resp.content)
+                        def json = new groovy.json.JsonSlurperClassic().parseText(resp.content)
                         env.RUN_ID = json.data.runId.toString()
                         echo "已触发运行 runId=\${env.RUN_ID}，轮询地址：\${params.ATP_BASE_URL}\${json.data.statusUrl}"
                     }
@@ -279,12 +279,12 @@ const JENKINSFILE_TEMPLATE = `pipeline {
                         def maxRetry = 180
                         for (int i = 0; i < maxRetry && status == 'RUNNING'; i++) {
                             sleep(time: 10, unit: 'SECONDS')
-                            def resp = httpRequest(
+                            def content = httpRequest(
                                 url: "\${params.ATP_BASE_URL}/ci/result/\${env.RUN_ID}",
                                 httpMode: 'GET',
                                 customHeaders: [[name: 'X-CI-Token', value: env.ATP_TOKEN]]
-                            )
-                            def json = new groovy.json.JsonSlurper().parseText(resp.content)
+                            ).content
+                            def json = new groovy.json.JsonSlurperClassic().parseText(content)
                             status = json.data.status
                             echo "轮询 #\${i + 1}: status=\${status} passed=\${json.data.passed} failed=\${json.data.failed}"
                         }
