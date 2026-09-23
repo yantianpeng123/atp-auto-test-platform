@@ -11,9 +11,12 @@ pipeline {
       steps {
         script {
           def trigResp = sh(script: "curl -s -X POST ${ATP_BASE}/api/ci/trigger -H 'X-CI-Token: ${ATP_TOKEN}' -H 'Content-Type: application/json' -d '{\"projectId\":${PROJECT_ID},\"batchId\":${BATCH_ID}}'", returnStdout: true).trim()
+          //新增一行
+          def jsonResp = readJSON text: trigResp
           echo "trigger resp: ${trigResp}"
-          def trig = new groovy.json.JsonSlurper().parseText(trigResp)
-          def runId = trig.runId
+          def trig = new groovy.json.JsonSlurper().parseText(jsonResp)
+          def runId = jsonResp.data.runId
+          //def runId = trig.runId
           echo "runId=${runId}"
           def status = 'RUNNING'
           timeout(time: 30, unit: 'MINUTES') {
