@@ -13,6 +13,7 @@ import com.atp.module.ci.vo.CiTriggerResultVO;
 import com.atp.module.plan.entity.PlanBatch;
 import com.atp.module.plan.mapper.PlanBatchMapper;
 import com.atp.module.plan.service.PlanBatchService;
+import com.atp.module.project.service.ProjectMemberService;
 import com.atp.module.execute.entity.ExecutionAssertion;
 import com.atp.module.execute.entity.ExecutionDetail;
 import com.atp.module.execute.mapper.ExecutionAssertionMapper;
@@ -21,9 +22,14 @@ import com.atp.module.plan.entity.PlanBatchRun;
 import com.atp.module.plan.entity.PlanBatchRunItem;
 import com.atp.module.plan.mapper.PlanBatchRunItemMapper;
 import com.atp.module.plan.mapper.PlanBatchRunMapper;
+import com.atp.common.result.PageResult;
+import com.atp.module.ci.vo.CiRunItem;
 import com.atp.module.plan.vo.PlanBatchRunVO;
 import com.atp.module.testcase.entity.TestCase;
 import com.atp.module.testcase.mapper.TestCaseMapper;
+import com.atp.security.UserPrincipal;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,6 +61,7 @@ public class CiServiceImpl implements CiService {
     private final PasswordEncoder passwordEncoder;
     private final PlanBatchRunMapper planBatchRunMapper;
     private final PlanBatchRunItemMapper planBatchRunItemMapper;
+    private final ProjectMemberService projectMemberService;
     private final ExecutionDetailMapper executionDetailMapper;
     private final ExecutionAssertionMapper executionAssertionMapper;
     private final TestCaseMapper testCaseMapper;
@@ -96,17 +103,24 @@ public class CiServiceImpl implements CiService {
     public CiResultVO getResult(Long runId, String token) {
         checkToken(runId, token);
         PlanBatchRunVO vo = planBatchService.getRun(runId);
+        PlanBatch batch = planBatchMapper.selectById(vo.getBatchId());
+        String batchName = batch != null ? batch.getName() : null;
 
         List<Object> items = vo.getItems() != null ? new ArrayList<>(vo.getItems()) : null;
         return CiResultVO.builder()
                 .runId(vo.getId())
                 .batchId(vo.getBatchId())
+                .batchName(batchName)
+                .triggerType(vo.getTriggerType())
                 .status(vo.getStatus())
                 .total(vo.getTotal())
                 .passed(vo.getPassed())
                 .failed(vo.getFailed())
                 .running(vo.getRunning())
                 .queued(vo.getQueued())
+                .startTime(vo.getStartTime())
+                .endTime(vo.getEndTime())
+                .durationMs(vo.getDurationMs())
                 .summaryUrl("/plan/batch/" + vo.getBatchId())
                 .items(items)
                 .build();
@@ -172,6 +186,24 @@ public class CiServiceImpl implements CiService {
         return toVO(config, plainToken);
     }
 
+    /** 按项目列出 CI 运行记录（平台内查看，需登录且为项目成员/管理员） */
+    @Override
+    public PageResult<CiRunItem> getRuns(Long projectId, UserPrincipal principal, long page, long size) {
+        // 项目成员或管理员可见；全局管理员放行，非管理员需要是项目成员
+        boolean isAdmin = "ADMIN".equals(principal.getRole());
+        if (!isAdmin && projectMemberService.getMyRole(projectId, principal.getId(), false) == null) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权访问该项目");
+        }
+        Page<CiRunItem> p = new Page<>(page, size);
+        IPage<CiRunItem> ip = planBatchRunMapper.selectCiRuns(p, projectId);
+        return PageResult.<CiRunItem>builder()
+                .records(ip.getRecords())
+                .total(ip.getTotal())
+                .page(ip.getCurrent())
+                .size(ip.getSize())
+                .build();
+    }
+
     /** 校验 run 存在且调用方持有合法 CI 令牌（按 run → batch → project → CiConfig 链路核对） */
     private void checkToken(Long runId, String token) {
         if (token == null || token.isBlank()) {
@@ -200,7 +232,30 @@ public class CiServiceImpl implements CiService {
     @Override
     public String buildReportXml(Long runId, String token) {
         checkToken(runId, token);
+        return buildReportXmlInternal(runId);
+    }
 
+    @Override
+    public String buildReportXml(Long runId, UserPrincipal principal) {
+        // 平台内查看：run → batch → project 校验当前用户是否为成员/管理员
+        PlanBatchRun run = planBatchRunMapper.selectById(runId);
+        if (run == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "运行实例不存在");
+        }
+        PlanBatch batch = planBatchMapper.selectById(run.getBatchId());
+        if (batch == null) {
+            throw new BizException(ResultCode.BATCH_NOT_FOUND);
+        }
+        // 全局管理员放行，非管理员需要是项目成员
+        boolean isAdmin = "ADMIN".equals(principal.getRole());
+        if (!isAdmin && projectMemberService.getMyRole(batch.getProjectId(), principal.getId(), false) == null) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权访问该运行记录");
+        }
+        return buildReportXmlInternal(runId);
+    }
+
+    /** 实际生成 JUnit XML（调用方已完成鉴权） */
+    private String buildReportXmlInternal(Long runId) {
         PlanBatchRun run = planBatchRunMapper.selectById(runId);
         PlanBatch batch = planBatchMapper.selectById(run.getBatchId());
         String rootName = batch != null && batch.getName() != null ? batch.getName() : ("run-" + runId);

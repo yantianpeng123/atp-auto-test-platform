@@ -84,6 +84,8 @@ export interface PlanBatchRunItem {
 export interface PlanBatchRun {
   id: number
   batchId: number
+  /** 批次名称 */
+  batchName: string | null
   triggerType: RunTriggerType
   status: RunStatus
   total: number

@@ -3,6 +3,7 @@ package com.atp.module.ci.vo;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -17,7 +18,13 @@ public class CiResultVO {
 
     private Long runId;
     private Long batchId;
+    private String batchName;
+    private String triggerType;
     private String status;
+
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private Long durationMs;
 
     private Integer total;
     private Integer passed;

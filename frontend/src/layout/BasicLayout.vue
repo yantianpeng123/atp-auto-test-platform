@@ -83,10 +83,20 @@
             <el-icon><Bell /></el-icon>
             <span>通知配置</span>
           </el-menu-item>
-          <el-menu-item index="/ci/config">
-            <el-icon><Connection /></el-icon>
-            <span>CI 集成</span>
-          </el-menu-item>
+          <el-sub-menu index="ci">
+            <template #title>
+              <el-icon><Connection /></el-icon>
+              <span>CI 集成</span>
+            </template>
+            <el-menu-item index="/ci/runs">
+              <el-icon><List /></el-icon>
+              <span>运行记录</span>
+            </el-menu-item>
+            <el-menu-item index="/ci/config">
+              <el-icon><Setting /></el-icon>
+              <span>配置</span>
+            </el-menu-item>
+          </el-sub-menu>
         </el-sub-menu>
       </el-menu>
 
@@ -227,6 +237,7 @@ import {
   FolderOpened,
   Grid,
   Link,
+  List,
   Odometer,
   Setting,
   Share,
@@ -318,13 +329,15 @@ const activePath = computed(() => {
   if (route.path.startsWith('/case')) return '/case'
   if (route.path.startsWith('/batch')) return '/batch'
   if (route.path.startsWith('/base')) return route.path
-  if (route.path.startsWith('/ci')) return '/ci/config'
+  if (route.path.startsWith('/ci/runs')) return '/ci/runs'
+  if (route.path.startsWith('/ci/config')) return '/ci/config'
   return route.path
 })
 
 const defaultOpeneds = computed(() => {
   const path = route.path
-  if (path.startsWith('/project') || path.startsWith('/notify') || path.startsWith('/ci')) return ['project']
+  if (path.startsWith('/ci')) return ['project', 'ci']
+  if (path.startsWith('/project') || path.startsWith('/notify')) return ['project']
   if (path.startsWith('/base')) return ['base']
   if (path.startsWith('/api') || path.startsWith('/case') || path.startsWith('/dataset')) return ['asset']
   if (path.startsWith('/plan') || path.startsWith('/report') || path.startsWith('/batch')) return ['run']

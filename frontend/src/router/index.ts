@@ -118,10 +118,22 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '通知配置', icon: 'Bell' }
       },
       {
+        path: 'ci/runs',
+        name: 'CiRuns',
+        component: () => import('@/views/ci/runs.vue'),
+        meta: { title: '运行记录', icon: 'List' }
+      },
+      {
+        path: 'ci/runs/:id',
+        name: 'CiRunDetail',
+        component: () => import('@/views/ci/run-detail.vue'),
+        meta: { title: '运行详情', hidden: true }
+      },
+      {
         path: 'ci/config',
         name: 'CiConfig',
         component: () => import('@/views/ci/config.vue'),
-        meta: { title: 'CI 集成', icon: 'Connection' }
+        meta: { title: 'CI 配置', icon: 'Connection' }
       }
     ]
   },

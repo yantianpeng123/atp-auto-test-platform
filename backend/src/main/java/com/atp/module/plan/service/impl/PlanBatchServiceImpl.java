@@ -487,6 +487,8 @@ public class PlanBatchServiceImpl implements PlanBatchService {
         PlanBatchRunVO vo = new PlanBatchRunVO();
         vo.setId(run.getId());
         vo.setBatchId(run.getBatchId());
+        PlanBatch batch = planBatchMapper.selectById(run.getBatchId());
+        vo.setBatchName(batch != null ? batch.getName() : null);
         vo.setTriggerType(run.getTriggerType());
         vo.setStartTime(run.getStartTime());
         vo.setEndTime(run.getEndTime());

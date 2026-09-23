@@ -18,6 +18,9 @@ public class PlanBatchRunVO {
 
     private Long batchId;
 
+    /** 批次名称（前端运行详情/列表展示用） */
+    private String batchName;
+
     private String triggerType;
 
     private String status;
