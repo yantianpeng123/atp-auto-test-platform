@@ -57,6 +57,13 @@ pipeline {
             }
           }
         }
+         stage('Fetch JUnit report & publish') {
+         steps{
+            withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
+                      sh "curl -s ${ATP_BASE}/api/ci/report/${env.RUN_ID}.xml -H 'X-CI-Token: ${ATP_TOKEN}' -o atp-report.xml"
+         }
+          junit 'atp-report.xml'
+         }
       }
     }
   }
