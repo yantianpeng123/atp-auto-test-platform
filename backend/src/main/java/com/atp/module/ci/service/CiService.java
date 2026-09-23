@@ -17,6 +17,9 @@ public interface CiService {
     /** 轮询某次运行的实时结果（供 CI 判断 build 红绿）。 */
     CiResultVO getResult(Long runId, String token);
 
+    /** 生成 JUnit 格式 XML 报告（供外部 CI 的 junit 步骤解析，含用例级与步骤断言明细）。 */
+    String buildReportXml(Long runId, String token);
+
     /** 新增/更新 CI 配置，返回配置（新建时含一次性明文令牌）。 */
     CiConfigVO upsertConfig(CiConfigSaveRequest req);
 

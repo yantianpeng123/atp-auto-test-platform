@@ -44,6 +44,7 @@ public class SecurityConfig {
             "/api/user/check-username",
             "/api/ci/trigger",
             "/api/ci/result/**",
+            "/api/ci/report/**",
             "/error"
     };
 

@@ -5,6 +5,7 @@ import com.atp.module.ci.dto.CiTriggerRequest;
 import com.atp.module.ci.service.CiService;
 import com.atp.module.ci.vo.CiResultVO;
 import com.atp.module.ci.vo.CiTriggerResultVO;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
 
 /**
  * CI 触发与结果轮询接口（供外部 CI 调用，无需用户 JWT，使用 X-CI-Token 令牌校验）。
@@ -38,5 +41,16 @@ public class CiController {
     public Result<CiResultVO> result(@RequestHeader("X-CI-Token") String token,
                                      @PathVariable Long runId) {
         return Result.success(ciService.getResult(runId, token));
+    }
+
+    /** 生成 JUnit 格式 XML 报告：供外部 CI 的 junit 步骤直接解析（含用例级与步骤断言明细）。 */
+    @GetMapping(value = "/report/{runId}.xml")
+    public void report(@RequestHeader("X-CI-Token") String token,
+                      @PathVariable Long runId,
+                      HttpServletResponse response) throws IOException {
+        String xml = ciService.buildReportXml(runId, token);
+        response.setContentType("application/xml;charset=UTF-8");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(xml);
     }
 }
