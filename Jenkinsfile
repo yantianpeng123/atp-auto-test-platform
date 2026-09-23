@@ -14,6 +14,8 @@ pipeline {
           echo "trigger resp: ${trigResp}"
           //def trig = new groovy.json.JsonSlurperClassic().parseText(trigResp)
           echo "trigger resp: ========222222========"
+          def runId = trig.data.runId
+          echo "trigger resp: ========33333======== ${runId}"
           def trig = readJSON text: trigResp
           echo "trigger resp: ==========111111======"
           def runId = trig.data.runId
