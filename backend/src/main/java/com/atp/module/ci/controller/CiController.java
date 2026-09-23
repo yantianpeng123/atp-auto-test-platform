@@ -3,9 +3,8 @@ package com.atp.module.ci.controller;
 import com.atp.common.result.Result;
 import com.atp.module.ci.dto.CiTriggerRequest;
 import com.atp.module.ci.service.CiService;
-import com.atp.common.result.PageResult;
 import com.atp.module.ci.vo.CiResultVO;
-import com.atp.module.ci.vo.CiRunItem;
+import com.atp.module.ci.vo.CiRunsPageVO;
 import com.atp.module.ci.vo.CiTriggerResultVO;
 import com.atp.security.UserPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -50,9 +49,9 @@ public class CiController {
 
     /** 按项目分页列出 CI 触发产生的运行记录（平台内运行历史查看，需登录）。 */
     @GetMapping("/runs")
-    public Result<PageResult<CiRunItem>> runs(@RequestParam Long projectId,
-                                              @RequestParam(defaultValue = "1") long page,
-                                              @RequestParam(defaultValue = "10") long size) {
+    public Result<CiRunsPageVO> runs(@RequestParam Long projectId,
+                                    @RequestParam(defaultValue = "1") long page,
+                                    @RequestParam(defaultValue = "10") long size) {
         UserPrincipal principal = (UserPrincipal) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
         return Result.success(ciService.getRuns(projectId, principal, page, size));

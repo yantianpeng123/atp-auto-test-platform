@@ -1,8 +1,10 @@
 package com.atp.module.plan.mapper;
 
 import com.atp.module.ci.vo.CiRunItem;
+import com.atp.module.ci.vo.CiRunStatusCount;
 import com.atp.module.plan.entity.PlanBatchRun;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import java.util.List;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
@@ -28,4 +30,16 @@ public interface PlanBatchRunMapper extends BaseMapper<PlanBatchRun> {
             ORDER BY r.id DESC
             """)
     IPage<CiRunItem> selectCiRuns(Page<CiRunItem> page, @Param("projectId") Long projectId);
+
+    /**
+     * 按项目聚合 CI 触发产生的运行实例各状态条数（覆盖全部数据，不受分页影响）。
+     */
+    @Select("""
+            SELECT r.status AS status, COUNT(*) AS cnt
+            FROM tb_plan_batch_run r
+            LEFT JOIN tb_plan_batch b ON b.id = r.batch_id AND b.deleted = 0
+            WHERE b.project_id = #{projectId} AND r.trigger_type = 'CI'
+            GROUP BY r.status
+            """)
+    List<CiRunStatusCount> countCiRunsByStatus(@Param("projectId") Long projectId);
 }

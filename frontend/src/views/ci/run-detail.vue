@@ -3,8 +3,8 @@
     <el-card shadow="never" class="page-card">
       <template #header>
         <div class="card-head">
-          <el-button :icon="ArrowLeft" link @click="goBack">返回运行记录</el-button>
-          <span class="card-title">运行 #{{ runId }}</span>
+          <el-button :icon="ArrowLeft" link @click="goBack">返回</el-button>
+          <span class="card-title"> #{{ runId }}</span>
           <el-tag v-if="run" :type="statusTag(run.status)" size="small" effect="dark">
             {{ statusText(run.status) }}
           </el-tag>

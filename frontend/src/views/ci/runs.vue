@@ -8,23 +8,23 @@
         </div>
       </template>
 
-      <!-- 统计卡 -->
+      <!-- 统计卡（聚合计数覆盖全部数据，不受分页影响） -->
       <div class="stat-row">
         <div class="stat-card">
           <div class="stat-label">总运行</div>
-          <div class="stat-value">{{ list.length }}</div>
+          <div class="stat-value">{{ summary.total }}</div>
         </div>
         <div class="stat-card stat-success">
           <div class="stat-label">成功</div>
-          <div class="stat-value">{{ countByStatus('SUCCESS') }}</div>
+          <div class="stat-value">{{ summary.success }}</div>
         </div>
         <div class="stat-card stat-partial">
           <div class="stat-label">部分失败</div>
-          <div class="stat-value">{{ countByStatus('PARTIAL_FAILED') }}</div>
+          <div class="stat-value">{{ summary.partialFailed }}</div>
         </div>
         <div class="stat-card stat-failed">
           <div class="stat-label">失败</div>
-          <div class="stat-value">{{ countByStatus('FAILED') }}</div>
+          <div class="stat-value">{{ summary.failed }}</div>
         </div>
       </div>
 
@@ -104,6 +104,7 @@ const projectId = computed(() => projectStore.currentProject?.id ?? 0)
 const loading = ref(false)
 const list = ref<CiRunItem[]>([])
 const total = ref(0)
+const summary = ref({ total: 0, success: 0, partialFailed: 0, failed: 0, running: 0 })
 const query = reactive({ page: 1, size: 10 })
 
 function statusTag(status: CiRunStatus): 'success' | 'danger' | 'warning' | 'info' {
@@ -137,10 +138,6 @@ function triggerText(t: string | null): string {
   return t || 'CI'
 }
 
-function countByStatus(status: CiRunStatus): number {
-  return list.value.filter((r) => r.status === status).length
-}
-
 function openDetail(runId: number) {
   router.push(`/ci/runs/${runId}`)
 }
@@ -155,6 +152,7 @@ async function load() {
     const data = await getCiRuns(projectId.value, query.page, query.size)
     list.value = data.records
     total.value = data.total
+    summary.value = data.summary
   } catch {
     // 错误已由拦截器统一提示
   } finally {

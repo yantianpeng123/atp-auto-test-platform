@@ -14,7 +14,7 @@
  * 由外部 CI（Jenkins 等）调用，前端无需对接。
  */
 import request from './request'
-import type { CiConfig, CiConfigSaveParams, Result, PageResult } from './types'
+import type { CiConfig, CiConfigSaveParams, Result } from './types'
 
 /** 运行/批次状态 */
 export type CiRunStatus = 'RUNNING' | 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED'
@@ -56,14 +56,32 @@ export function regenerateCiToken(projectId: number): Promise<CiConfig> {
     .then((res) => res.data)
 }
 
+/** CI 运行记录分页结果（含按状态聚合的汇总计数，覆盖全部数据） */
+export interface CiRunsPage {
+  /** 当前页记录 */
+  records: CiRunItem[]
+  /** 全部数据总条数 */
+  total: number
+  page: number
+  size: number
+  /** 按状态聚合的汇总计数（不受分页影响） */
+  summary: {
+    total: number
+    success: number
+    partialFailed: number
+    failed: number
+    running: number
+  }
+}
+
 /** 按项目分页列出 CI 运行记录（平台内运行历史） */
 export function getCiRuns(
   projectId: number,
   page = 1,
   size = 10
-): Promise<PageResult<CiRunItem>> {
+): Promise<CiRunsPage> {
   return request
-    .get<unknown, Result<PageResult<CiRunItem>>>('/ci/runs', {
+    .get<unknown, Result<CiRunsPage>>('/ci/runs', {
       params: { projectId, page, size }
     })
     .then((res) => res.data)

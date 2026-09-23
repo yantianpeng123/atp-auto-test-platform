@@ -22,7 +22,8 @@ import com.atp.module.plan.entity.PlanBatchRun;
 import com.atp.module.plan.entity.PlanBatchRunItem;
 import com.atp.module.plan.mapper.PlanBatchRunItemMapper;
 import com.atp.module.plan.mapper.PlanBatchRunMapper;
-import com.atp.common.result.PageResult;
+import com.atp.module.ci.vo.CiRunsPageVO;
+import com.atp.module.ci.vo.CiRunStatusCount;
 import com.atp.module.ci.vo.CiRunItem;
 import com.atp.module.plan.vo.PlanBatchRunVO;
 import com.atp.module.testcase.entity.TestCase;
@@ -188,7 +189,7 @@ public class CiServiceImpl implements CiService {
 
     /** 按项目列出 CI 运行记录（平台内查看，需登录且为项目成员/管理员） */
     @Override
-    public PageResult<CiRunItem> getRuns(Long projectId, UserPrincipal principal, long page, long size) {
+    public CiRunsPageVO getRuns(Long projectId, UserPrincipal principal, long page, long size) {
         // 项目成员或管理员可见；全局管理员放行，非管理员需要是项目成员
         boolean isAdmin = "ADMIN".equals(principal.getRole());
         if (!isAdmin && projectMemberService.getMyRole(projectId, principal.getId(), false) == null) {
@@ -196,11 +197,34 @@ public class CiServiceImpl implements CiService {
         }
         Page<CiRunItem> p = new Page<>(page, size);
         IPage<CiRunItem> ip = planBatchRunMapper.selectCiRuns(p, projectId);
-        return PageResult.<CiRunItem>builder()
+
+        // 按状态聚合全部数据的计数（不受分页影响，供统计卡使用）
+        List<CiRunStatusCount> counts = planBatchRunMapper.countCiRunsByStatus(projectId);
+        long success = 0, partialFailed = 0, failed = 0, running = 0;
+        for (CiRunStatusCount c : counts) {
+            switch (c.getStatus()) {
+                case "SUCCESS" -> success += c.getCnt();
+                case "PARTIAL_FAILED" -> partialFailed += c.getCnt();
+                case "FAILED" -> failed += c.getCnt();
+                case "RUNNING" -> running += c.getCnt();
+                default -> { /* 未知状态忽略 */ }
+            }
+        }
+        long totalCount = ip.getTotal();
+        CiRunsPageVO.CiRunSummary summary = CiRunsPageVO.CiRunSummary.builder()
+                .total(totalCount)
+                .success(success)
+                .partialFailed(partialFailed)
+                .failed(failed)
+                .running(running)
+                .build();
+
+        return CiRunsPageVO.builder()
                 .records(ip.getRecords())
-                .total(ip.getTotal())
+                .total(totalCount)
                 .page(ip.getCurrent())
                 .size(ip.getSize())
+                .summary(summary)
                 .build();
     }
 

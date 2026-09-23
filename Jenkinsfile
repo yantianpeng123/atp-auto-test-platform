@@ -4,6 +4,9 @@ pipeline {
     ATP_BASE   = 'http://host.docker.internal:8080'
     PROJECT_ID = '3'
     BATCH_ID   = '2'
+    APP_NAME   = 'atp-app'
+    APP_PORT   = '9090'
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"
   }
   stages {
     stage('Trigger ATP regression') {
@@ -67,6 +70,20 @@ pipeline {
       }
     }
   }
+  stage('Maven Build') {
+        steps {
+          sh 'mvn clean package -DskipTests'
+        }
+      }
+      stage('Build Image') {
+            steps {
+              sh '''
+                docker build -t ${APP_NAME}:${IMAGE_TAG} -f Dockerfile .
+                docker tag ${APP_NAME}:${IMAGE_TAG} ${APP_NAME}:latest
+                echo "镜像构建完成: ${APP_NAME}:${IMAGE_TAG}"
+              '''
+            }
+          }
 }
   post {
     always {

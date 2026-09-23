@@ -60,3 +60,8 @@ atp:
 logging:
   level:
     com.atp: debug
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
