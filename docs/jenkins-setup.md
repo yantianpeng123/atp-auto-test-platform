@@ -106,6 +106,7 @@ pipeline {
           def trig = new groovy.json.JsonSlurper().parseText(trigResp)
           def runId = trig.runId
           echo "runId=${runId}"
+          env.RUN_ID = runId.toString()
           def status = 'RUNNING'
           timeout(time: 30, unit: 'MINUTES') {
             while (status == 'RUNNING') {
@@ -113,13 +114,19 @@ pipeline {
               def resResp = sh(script: "curl -s ${ATP_BASE}/api/ci/result/${runId} -H 'X-CI-Token: ${ATP_TOKEN}'", returnStdout: true).trim()
               def res = new groovy.json.JsonSlurper().parseText(resResp)
               status = res.status
-              def passed = res.passed ?: 0
-              def failed = res.failed ?: 0
-              echo "status=${status} passed=${passed} failed=${failed}"
-              if (status == 'FAILED' || (failed as int) > 0) { error("ATP 回归失败: 通过 ${passed} / 失败 ${failed}") }
+              echo "status=${status} passed=${res.passed ?: 0} failed=${res.failed ?: 0}"
             }
           }
         }
+      }
+    }
+    stage('Fetch JUnit report & publish') {
+      steps {
+        // 拉取 JUnit 格式报告（含用例级与每条步骤的断言明细），交给原生 junit 步骤渲染并判定红绿
+        withCredentials([string(credentialsId: 'atp-ci-token', variable: 'ATP_TOKEN')]) {
+          sh "curl -s ${ATP_BASE}/api/ci/report/${env.RUN_ID}.xml -H 'X-CI-Token: ${ATP_TOKEN}' -o atp-report.xml"
+        }
+        junit 'atp-report.xml'
       }
     }
   }
@@ -154,7 +161,7 @@ pipeline {
 Jenkins 侧跑通的前提是 **ATP 平台已实现 CI 入站接口**，核心依赖：
 
 1. **批次执行异步化**（P1 阻塞项）：`POST /api/plan/batch/{id}/execute` 当前是**同步**跑完才返回，长批次会 HTTP 超时。需改造为「触发即返回 runId + 后台执行」。（平台侧 `/api/ci/result/{runId}` 轮询端点基于现有 `/api/plan/batch/run/{runId}`，可复用。）
-2. 新增 `tb_ci_config` 表 + `POST /api/ci/trigger` + `GET /api/ci/result/{runId}`（带 `X-CI-Token` 校验）。
+2. 新增 `tb_ci_config` 表 + `POST /api/ci/trigger` + `GET /api/ci/result/{runId}` + `GET /api/ci/report/{runId}.xml`（均带 `X-CI-Token` 校验；report 端点吐 JUnit 标准 XML，供 Jenkins 原生 `junit` 步骤渲染用例级报告与每条步骤的断言明细）。
 3. `SecurityConfig` 白名单放行 `/api/ci/**`。
 
 > 平台侧最小闭环未实现前，可临时用「Jenkins 先 login 拿 JWT → 调现有同步批次执行接口」做验证，但长批次仍会超时，故异步化是硬前置。
