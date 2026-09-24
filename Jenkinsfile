@@ -105,6 +105,42 @@ pipeline {
             '''
         }
       }
+      stage('Health Check') {
+            steps {
+              script {
+                def healthy = sh(
+                  script: '''
+                    for i in $(seq 1 30); do
+                      if curl -sf http://localhost:${APP_PORT}/actuator/health; then
+                        echo "健康检查通过"
+                        exit 0
+                      fi
+                      echo "等待应用启动... ($i/30)"
+                      sleep 5
+                    done
+                    echo "健康检查失败"
+                    exit 1
+                  ''',
+                  returnStatus: true
+                ) == 0
+
+                if (!healthy) {
+                  sh '''
+                    OLD_IMAGE=$(cat /tmp/${APP_NAME}_old_image)
+                    docker stop ${APP_NAME} || true
+                    docker rm ${APP_NAME} || true
+                    if [ -n "$OLD_IMAGE" ]; then
+                      docker run -d --name ${APP_NAME} -p ${APP_PORT}:8080 --restart always $OLD_IMAGE
+                      echo "已回滚到: $OLD_IMAGE"
+                    else
+                      echo "无旧镜像可回滚"
+                    fi
+                  '''
+                  error("健康检查失败，已回滚")
+                }
+              }
+            }
+          }
 }
   post {
     always {
