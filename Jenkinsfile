@@ -78,6 +78,14 @@ pipeline {
         }
       }
       stage('Build Image') {
+                  steps {
+                    sh '''
+                      docker build -t ${APP_NAME}:${IMAGE_TAG} -f dockerfile .
+                      docker tag ${APP_NAME}:${IMAGE_TAG} ${APP_NAME}:latest
+                      echo "镜像构建完成: ${APP_NAME}:${IMAGE_TAG}"
+                    '''
+                  }
+                }stage('Build Image') {
             steps {
               sh '''
                 docker build -t ${APP_NAME}:${IMAGE_TAG} -f dockerfile .
@@ -89,8 +97,15 @@ pipeline {
       stage('Deploy'){
         steps{
             sh '''
-            OLD_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${APP_NAME} 2>/dev/null || echo "")
-            echo "$OLD_IMAGE" > /tmp/${APP_NAME}_old_image
+            OLD_CONTAINER_EXISTS=$(docker ps -a --filter "name=^${APP_NAME}$" --format '{{.Names}}')
+            if [ -n "$OLD_CONTAINER_EXISTS" ]; then
+                    OLD_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${APP_NAME} 2>/dev/null || echo "")
+                    echo "$OLD_IMAGE" > /tmp/${APP_NAME}_old_image
+                    echo "旧镜像: $OLD_IMAGE"
+                  else
+                    echo "" > /tmp/${APP_NAME}_old_image
+                    echo "首次部署，无旧镜像"
+            fi
              docker stop ${APP_NAME} || true
              docker rm ${APP_NAME} || true
              docker run -d --name ${APP_NAME} \
@@ -126,7 +141,17 @@ pipeline {
                   ''',
                   returnStatus: true
                 ) == 0
-
+                if(healthy){
+                    sh '''
+                              OLD_IMAGE=$(cat /tmp/${APP_NAME}_old_image)
+                              if [ -n "$OLD_IMAGE" ] && [ "$OLD_IMAGE" != "${APP_NAME}:${IMAGE_TAG}" ]; then
+                                echo "清理旧镜像: $OLD_IMAGE"
+                                docker rmi "$OLD_IMAGE" || true
+                              fi
+                              # 可选：清理未使用的镜像
+                              docker image prune -f --filter "until=24h"
+                        '''
+                }
                 if (!healthy) {
                   sh '''
                     OLD_IMAGE=$(cat /tmp/${APP_NAME}_old_image)
