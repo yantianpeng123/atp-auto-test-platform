@@ -97,7 +97,7 @@ pipeline {
                      --add-host host.docker.internal:host-gateway \
                      -p ${APP_PORT}:8081 \
                      --restart always \
-                     -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/apt?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true" \
+                     -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/atp?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true" \
                      -e SPRING_DATASOURCE_USERNAME="root" \
                      -e SPRING_DATASOURCE_PASSWORD="root" \
                      ${APP_NAME}:${IMAGE_TAG}
