@@ -93,6 +93,7 @@ pipeline {
             echo "$OLD_IMAGE" > /tmp/${APP_NAME}_old_image
              docker stop ${APP_NAME} || true
              docker rm ${APP_NAME} || true
+             docker rmi ${OLD_IMAGE} || true
              docker run -d --name ${APP_NAME} \
                      --add-host host.docker.internal:host-gateway \
                      -p ${APP_PORT}:8081 \
@@ -111,7 +112,7 @@ pipeline {
                 def healthy = sh(
                   script: '''
                     for i in $(seq 1 30); do
-                      if curl -sf http://localhost:${APP_PORT}/actuator/health; then
+                      if curl -sf http://host.docker.internal:${APP_PORT}/actuator/health; then
                         echo "健康检查通过"
                         exit 0
                       fi
