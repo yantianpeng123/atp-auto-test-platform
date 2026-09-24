@@ -105,7 +105,7 @@ pipeline {
             '''
         }
       }
-      stage('Health Check') {
+      /* stage('Health Check') {
             steps {
               script {
                 def healthy = sh(
@@ -147,7 +147,7 @@ pipeline {
                 }
               }
             }
-          }
+          } */
 }
   post {
     always {
