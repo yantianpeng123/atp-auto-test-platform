@@ -100,6 +100,9 @@ pipeline {
                      -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/atp?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true" \
                      -e SPRING_DATASOURCE_USERNAME="root" \
                      -e SPRING_DATASOURCE_PASSWORD="root" \
+                     -e SPRING_DATA_REDIS_HOST=host.docker.internal \
+                     -e SPRING_DATA_REDIS_PORT=6379 \
+                     -e SPRING_DATA_REDIS_PASSWORD= \
                      ${APP_NAME}:${IMAGE_TAG}
                      echo "部署完成: ${APP_NAME}:${IMAGE_TAG}"
             '''
@@ -137,6 +140,9 @@ pipeline {
                                            -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/atp?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true" \
                                            -e SPRING_DATASOURCE_USERNAME="root" \
                                            -e SPRING_DATASOURCE_PASSWORD="root" \
+                                           -e SPRING_DATA_REDIS_HOST=host.docker.internal \
+                                           -e SPRING_DATA_REDIS_PORT=6379 \
+                                           -e SPRING_DATA_REDIS_PASSWORD= \
                                            ${APP_NAME}:${IMAGE_TAG}
                       echo "已回滚到: $OLD_IMAGE"
                     else
