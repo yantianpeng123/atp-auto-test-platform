@@ -85,14 +85,7 @@ pipeline {
                       echo "镜像构建完成: ${APP_NAME}:${IMAGE_TAG}"
                     '''
                   }
-                }stage('Build Image') {
-            steps {
-              sh '''
-                docker build -t ${APP_NAME}:${IMAGE_TAG} -f dockerfile .
-                docker tag ${APP_NAME}:${IMAGE_TAG} ${APP_NAME}:latest
-                echo "镜像构建完成: ${APP_NAME}:${IMAGE_TAG}"
-              '''
-            }
+                }
           }
       stage('Deploy'){
         steps{
