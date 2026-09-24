@@ -93,7 +93,6 @@ pipeline {
             echo "$OLD_IMAGE" > /tmp/${APP_NAME}_old_image
              docker stop ${APP_NAME} || true
              docker rm ${APP_NAME} || true
-             docker rmi ${OLD_IMAGE} || true
              docker run -d --name ${APP_NAME} \
                      --add-host host.docker.internal:host-gateway \
                      -p ${APP_PORT}:8081 \
@@ -131,7 +130,14 @@ pipeline {
                     docker stop ${APP_NAME} || true
                     docker rm ${APP_NAME} || true
                     if [ -n "$OLD_IMAGE" ]; then
-                      docker run -d --name ${APP_NAME} -p ${APP_PORT}:8080 --restart always $OLD_IMAGE
+                      docker run -d --name ${APP_NAME} \
+                                           --add-host host.docker.internal:host-gateway \
+                                           -p ${APP_PORT}:8081 \
+                                           --restart always \
+                                           -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/atp?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true" \
+                                           -e SPRING_DATASOURCE_USERNAME="root" \
+                                           -e SPRING_DATASOURCE_PASSWORD="root" \
+                                           ${APP_NAME}:${IMAGE_TAG}
                       echo "已回滚到: $OLD_IMAGE"
                     else
                       echo "无旧镜像可回滚"
