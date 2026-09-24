@@ -45,7 +45,8 @@ public class SecurityConfig {
             "/api/ci/trigger",
             "/api/ci/result/**",
             "/api/ci/report/**",
-            "/error"
+            "/error",
+            " /actuator/**"
     };
 
     @Bean
