@@ -266,7 +266,7 @@ pipeline {
               docker image prune -f --filter "until=24h" || true
             '''
           } else {
-            // 健康检查失败：用旧镜像回滚
+            // 健康检查失败：1用旧镜像回滚
             sh '''
               OLD_IMAGE=$(cat /tmp/${FRONTEND_APP_NAME}_old_image)
               docker stop ${FRONTEND_APP_NAME} || true
