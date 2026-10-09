@@ -318,7 +318,7 @@ public class NotifyServiceImpl implements NotifyService {
         p.setTitle(String.format("[测试通知] %s《%s》执行%s", noun, str(p.getCaseName()), verb));
         String link = p.getLinkUrl() == null ? "" : p.getLinkUrl();
         p.setContent(String.format(
-                "**%s：** %s\n**结果：** %s\n**通过/失败轮次：** %d / %d\n**执行人：** %s\n**查看报告：** %s",
+                "**%s：** %s\n**结果：** %s\n**通过/失败轮次：** %d / %d\n**执行人：** %s\n**查看报告：**http://127.0.0.1:8080/%s",
                 noun, str(p.getCaseName()), str(p.getStatus()),
                 nz(p.getPassedRounds()), nz(p.getFailedRounds()),
                 str(p.getExecutorName()), link));
