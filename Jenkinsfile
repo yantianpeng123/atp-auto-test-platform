@@ -146,8 +146,22 @@ pipeline {
     stage('Frontend Deploy') {
       steps {
         sh '''
+          # 保存旧镜像，用于回滚
+          OLD_CONTAINER_EXISTS=$(docker ps -a --filter "name=^${FRONTEND_APP_NAME}$" --format '{{.Names}}')
+          if [ -n "$OLD_CONTAINER_EXISTS" ]; then
+            OLD_IMAGE=$(docker inspect --format='{{.Config.Image}}' ${FRONTEND_APP_NAME} 2>/dev/null || echo "")
+            echo "$OLD_IMAGE" > /tmp/${FRONTEND_APP_NAME}_old_image
+            echo "旧镜像: $OLD_IMAGE"
+          else
+            echo "" > /tmp/${FRONTEND_APP_NAME}_old_image
+            echo "首次部署，无旧镜像"
+          fi
+
+          # 停旧容器
           docker stop ${FRONTEND_APP_NAME} || true
           docker rm ${FRONTEND_APP_NAME} || true
+
+          # 起新容器
           docker run -d --name ${FRONTEND_APP_NAME} \
             --add-host host.docker.internal:host-gateway \
             -p ${FRONTEND_PORT}:80 \
@@ -240,8 +254,41 @@ pipeline {
             ''',
             returnStatus: true
           ) == 0
-          if (!ok) {
-            error("前端健康检查失败")
+
+          if (ok) {
+            // 健康检查通过：清理旧镜像
+            sh '''
+              OLD_IMAGE=$(cat /tmp/${FRONTEND_APP_NAME}_old_image)
+              if [ -n "$OLD_IMAGE" ] && [ "$OLD_IMAGE" != "${FRONTEND_APP_NAME}:${IMAGE_TAG}" ]; then
+                echo "清理旧镜像: $OLD_IMAGE"
+                docker rmi "$OLD_IMAGE" || true
+              fi
+              docker image prune -f --filter "until=24h" || true
+            '''
+          } else {
+            // 健康检查失败：用旧镜像回滚
+            sh '''
+              OLD_IMAGE=$(cat /tmp/${FRONTEND_APP_NAME}_old_image)
+              docker stop ${FRONTEND_APP_NAME} || true
+              docker rm ${FRONTEND_APP_NAME} || true
+
+              if [ -n "$OLD_IMAGE" ]; then
+                docker run -d --name ${FRONTEND_APP_NAME} \
+                  --add-host host.docker.internal:host-gateway \
+                  -p ${FRONTEND_PORT}:80 \
+                  --restart always \
+                  -e BACKEND_HOST=host.docker.internal \
+                  -e BACKEND_PORT=${APP_PORT} \
+                  $OLD_IMAGE
+                echo "已回滚到: $OLD_IMAGE"
+              else
+                echo "无旧镜像可回滚"
+              fi
+
+              # 删除本次失败的新镜像
+              docker rmi ${FRONTEND_APP_NAME}:${IMAGE_TAG} || true
+            '''
+            error("前端健康检查失败，已回滚")
           }
         }
       }
