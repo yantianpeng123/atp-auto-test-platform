@@ -1,10 +1,10 @@
 # ATP 自动化测试平台
 
-前后端分离的接口自动化测试平台。前端 Vue3 + TypeScript + Vite，后端 Java 17 + Spring Boot 3。
+前后端分离的接口自动化测试平台。前端 Vue3 + TypeScript + Vite，后端 Java 17 + Spring Boot 3 + MyBatis-Plus。
 
-> 当前进度：**第三阶段（中后段）**
-> 用户认证、项目管理、基础数据、接口定义、环境配置、用例编排、数据源、执行引擎已完成；
-> 执行记录落库、测试计划、报告中心尚未实现。
+> 当前进度：**核心功能已基本完成**
+> 用户认证、项目管理（含项目级 RBAC 成员）、基础数据、接口定义、组合组件、数据生成器、环境配置、用例编排、数据源、执行引擎、执行记录落库、测试计划与批次（Cron 调度）、报告中心、通知中心（钉钉 / 163 邮件 / 站内信）、CI 集成、仪表盘均已实现并推送到 `main`。
+> 仍存在的少量缺口见文末「已知缺口 / 待办」。
 >
 > 完整进度、表结构、接口清单与已知问题见 → [`docs/HANDOVER.md`](docs/HANDOVER.md)
 
@@ -16,18 +16,29 @@
 | --- | --- |
 | 用户认证 | 注册、登录、登出、图形验证码、JWT 鉴权、角色体系（ADMIN/TESTER/VIEWER） |
 | 项目管理 | 项目卡片列表、新增项目、登录后选择项目（localStorage 持久化）、切换项目 |
+| 项目级 RBAC | 项目成员管理（OWNER/MAINTAINER/DEVELOPER/VIEWER）、`my-role`、成员增删改角色、保底至少 1 名 OWNER |
 | 基础数据 | 工程 / 版本 / 模块三级级联；接口定义列表、手动新增、**Jar 包导入**（解析 Spring MVC 注解） |
+| 组合组件 | 公共接口组件（强引用联动、多层嵌套、防环、变量透传、三阶段 pre/main/post 编排） |
+| 数据生成器 | 表达式引擎（9 个函数）、生成器 CRUD、用例/组件内 `stepType=3` 生成变量写入变量池 |
 | 环境配置 | 环境 CRUD：base_url、全局 header、数据库配置 |
 | 用例管理 | 用例 CRUD、启停、**多步骤串行编排**、**HAR 包导入生成用例** |
 | 数据源管理 | 数据源模板 CRUD、字段(key) 定义、数据项多行编辑（用例执行时按行替换变量） |
 | 执行引擎 | HTTP 执行、变量解析、断言校验、多轮数据驱动；用例编辑页提供「调试运行」 |
+| 执行记录 | 执行过程落库（`tb_execution` / `tb_execution_detail`），支持嵌套组合组件树还原 |
+| 测试计划 | 测试计划 / 批次编排、Cron 调度（`PlanBatchScheduler`）、批次执行与完成事件 |
+| 报告中心 | 执行报告、图表看板（`report.vue` / `reportCenter.vue` / `dashboard`） |
+| 通知中心 | 通知渠道（钉钉 / 163 邮件 / 站内信）、通知规则、发送日志、顶栏消息中心与未读角标 |
+| CI 集成 | `POST /api/ci/trigger`（X-CI-Token 免 JWT）、结果查询、配置管理、JUnit XML 报告、运行记录页 |
+| 仪表盘 | 工作台概览 |
 
 **核心数据层级**
 
 ```
 项目 Project → 工程 Application → 版本 Version → 模块 Module → 接口 ApiDefinition
                                                               ↓
-                                                    用例 TestCase → 步骤 CaseStep
+                                          用例 TestCase → 步骤 CaseStep（或引用组合组件 / 生成变量）
+                                                              ↓
+                                          测试计划 TestPlan → 批次 PlanBatch → 批次项 PlanBatchItem
 ```
 
 ---
@@ -39,6 +50,7 @@ auto-test-platform/
 ├── docs/
 │   ├── ARCHITECTURE.md      # 架构设计（技术选型、分层、表结构、接口规范）
 │   ├── HANDOVER.md          # 交接文档：进度 / 接口清单 / 已知问题 / 下一步
+│   ├── jenkins-setup.md     # Jenkins + GitLab Webhook 对接指南
 │   └── thinks.md            # 每轮问题处理的思考过程与决策记录
 ├── backend/                 # Spring Boot 3
 │   └── src/main/
@@ -47,18 +59,27 @@ auto-test-platform/
 │       │   ├── config/      # Security / 跨域 / MyBatis-Plus / Jackson 配置
 │       │   ├── security/    # JWT 签发、认证过滤器、登录主体
 │       │   └── module/      # 业务域，互不横向依赖
-│       │       ├── user/     project/    base/
-│       │       ├── env/      testcase/   dataset/   execute/
+│       │       ├── user/       # 认证、用户
+│       │       ├── project/    # 项目管理 + 项目级 RBAC 成员
+│       │       ├── base/       # 工程/版本/模块、接口定义、组合组件、数据生成器
+│       │       ├── env/        # 环境配置
+│       │       ├── testcase/   # 用例管理、步骤
+│       │       ├── dataset/    # 数据源模板
+│       │       ├── execute/    # 执行引擎、执行记录落库、报告
+│       │       ├── plan/       # 测试计划、批次、Cron 调度
+│       │       ├── ci/         # CI 触发/结果/配置/JUnit 报告
+│       │       └── notify/     # 通知渠道/规则/日志/站内信/钉钉/163 邮件
 │       └── resources/
 │           ├── application.yml
-│           └── db/schema.sql
+│           └── db/schema.sql + notify_tables.sql
 └── frontend/                # Vue 3
     └── src/
         ├── api/             # request.ts 拦截器 + 各业务 API
-        ├── layout/          # 框架布局（侧边栏 + 顶栏）
+        ├── layout/          # 框架布局（侧边栏 + 顶栏 + 消息中心）
         ├── router/          # 路由与登录守卫
-        ├── stores/          # Pinia 状态（user / project / tabs）
-        ├── views/           # 登录 / 注册 / 工作台 / 基础数据 / 用例 / 数据源 / 环境
+        ├── stores/          # Pinia 状态（user / project / tabs / generatorSelect）
+        ├── views/           # login / register / dashboard / base / case / dataset /
+        │                   #   env / execute / plan / ci / notify / project
         └── utils/           # 令牌存取
 ```
 
@@ -82,9 +103,10 @@ auto-test-platform/
 
 ```bash
 mysql -u root -p < backend/src/main/resources/db/schema.sql
+mysql -u root -p atp < backend/src/main/resources/db/notify_tables.sql
 ```
 
-脚本会创建 `atp` 库、全部业务表，并插入初始管理员账号。
+脚本会创建 `atp` 库、全部业务表（含 `tb_notify_*`），并插入初始管理员账号。
 
 > 若 MySQL 账号密码不是 `root/root`，请同步修改 `backend/src/main/resources/application.yml`。
 
@@ -145,14 +167,19 @@ npm run dev
 | --- | --- | --- |
 | 认证 | `/api/auth` | register / login / logout / captcha |
 | 用户 | `/api/user` | info / check-username |
-| 项目 | `/api/project` | list / 新增 |
+| 项目 | `/api/project` | list / 新增 / my-role / members / 成员角色管理 |
 | 基础数据 | `/api/base` | 工程·版本·模块 options 与新增、version/list、api/list、api、api/import（Jar） |
+| 组合组件 | `/api/component` | 组合组件 CRUD、步骤编排、引用展开 |
+| 生成器 | `/api/generator` | 数据生成器 CRUD、/preview、/functions |
 | 用例 | `/api/case` | list / {id} / {caseId}/steps / 新增 / 修改 / 删除 / {id}/status / import（HAR） |
 | 数据源 | `/api/dataset/template` | list / {id} / 新增 / 修改 / 删除 |
 | 环境 | `/api/env` | list / 新增 / 修改 / 删除 |
-| 执行 | `/api/execute/case/{caseId}` | 调试执行用例 |
+| 执行 | `/api/execute/*` | case 调试执行、批次执行、报告 |
+| 测试计划 | `/api/plan` / `/api/plan/batch/*` | 计划 CRUD、批次、调度、run/{runId} |
+| CI | `/api/ci/*` | trigger / result / config / runs / report.xml |
+| 通知 | `/api/notify/*` | channel / rule / log / messages / unread-count |
 
-> 完整 30 个接口的方法、路径与说明见 `docs/HANDOVER.md` 第七节。
+> 完整接口的方法、路径与说明见 `docs/HANDOVER.md`。
 
 ---
 
@@ -176,28 +203,43 @@ JWT 载荷含 `userId` / `username` / `role`，有效期 2 小时，密钥在 `a
 用例由多个步骤串行执行，步骤间通过「响应变量名」传递参数：
 `${varName.path}` 从 body 根解析、`${varName.header.x}` 取响应头、`${varName.status}` 取状态码。
 数据源（数据项）按行做多轮驱动，每行数据替换一轮 `${变量}`。
+组合组件支持多层嵌套（防环 + 深度守卫 `MAX_COMPONENT_DEPTH=10`），执行时递归展开；`stepType=3` 步骤由数据生成器产出变量写入共享变量池。
 
 **HAR 导入**
 解析 `log.entries[]`，剥离敏感 header（Authorization / Cookie / Proxy-Authorization），
 按 `module_id + method + path` 去重（已存在跳过、不存在则新建接口，`name` 填空串、`source_flag` 标记来源），
 按时间排序生成步骤并自动带状态码断言。
 
+**通知与 CI**
+通知中心支持钉钉机器人、163 邮件、站内信三种渠道，可按规则（如批次完成）触发，发送记录入 `tb_notify_log`，站内信入 `tb_notify_message` 并在顶栏展示未读角标。
+CI 模块暴露 `POST /api/ci/trigger`（Jenkins 凭 `X-CI-Token` 免 JWT 调用），后端异步执行并返回 `runId`，Jenkins 轮询结果或拉取 JUnit XML 报告。
+
 ---
 
-## 八、后续阶段
+## 八、阶段完成情况
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | 第一阶段 ~ 第二阶段 | 架构、鉴权、项目管理、基础数据、接口定义、环境、用例编排、数据源、执行引擎 | ✅ 已完成 |
-| 第三阶段 | **执行记录落库**（`tb_execution` / `tb_execution_detail` 表已建，代码未实现） | 🔶 待补 |
-| 第四阶段 | 报告中心、图表看板、测试计划与 Cron 调度 | ⬜ 未开始 |
-| 第五阶段 | CI 集成、项目级 RBAC、并发执行与性能优化 | ⬜ 未开始 |
-
-前端菜单中「测试计划」「报告中心」为 disabled 占位态。
+| 第三阶段 | 执行记录落库（`tb_execution` / `tb_execution_detail`） | ✅ 已完成 |
+| 第四阶段 | 报告中心、图表看板、测试计划与 Cron 调度 | ✅ 已完成 |
+| 第五阶段 | CI 集成、项目级 RBAC、组合组件、数据生成器、通知中心 | ✅ 已完成 |
 
 ---
 
-## 九、开发注意事项
+## 九、已知缺口 / 待办
+
+以下功能/优化项**尚未完成**，按优先级排列：
+
+1. **`regenEachRun=0`（跨轮固定值）语义未实现** —— `ExecuteServiceImpl` 中变量池每轮重建、永远每轮重算，`regen_each_run` 列已落库但不参与判断；UI 开关当前无效。
+2. **测试计划删除未级联清理** —— `TestPlanServiceImpl.delete()` 仅逻辑删除计划本身，未清理 `tb_plan_batch` / `tb_plan_batch_item`，会残留孤儿数据（历史上"测试计划不存在"类报错的根因之一）。
+3. **执行日志未落地** —— 按天滚动文件日志（`tb_execution_log`）方案尚未写代码，执行过程缺乏服务器侧可追溯日志。
+
+另：部分前端文件（`api/notify.ts`、`notify/config.vue`、`BasicLayout.vue` 等）仍残留"后端未实现时兜底"的过期注释/分支，实际后端接口已可用，建议在清理时一并移除。
+
+---
+
+## 十、开发注意事项
 
 1. **Vite 开发服务器会假死**：表现为端口能连上但 HTTP 无响应，列表还在而弹窗数据全空。
    确认方式：`nc -z 127.0.0.1 5173` 通、`curl http://127.0.0.1:5173/` 超时。

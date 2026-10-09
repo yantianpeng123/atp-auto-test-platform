@@ -7,6 +7,9 @@ pipeline {
     APP_NAME   = 'atp-app'
     APP_PORT   = '9090'
     IMAGE_TAG  = "${env.BUILD_NUMBER}"
+
+    FRONTEND_APP_NAME = 'atp-frontend'
+    FRONTEND_PORT     = '8080'
   }
   stages {
     stage('Trigger ATP regression') {
@@ -90,6 +93,20 @@ pipeline {
       }
     }
 
+    // 前端镜像：Dockerfile 内只跑 vite build（esbuild 转译，低内存）。
+    // 注意：CI 未单独跑 vue-tsc 类型检查，类型问题需开发者本地把关。
+    stage('Frontend Build Image') {
+      steps {
+        dir('frontend') {
+          sh '''
+            docker build -t ${FRONTEND_APP_NAME}:${IMAGE_TAG} -f Dockerfile .
+            docker tag ${FRONTEND_APP_NAME}:${IMAGE_TAG} ${FRONTEND_APP_NAME}:latest
+            echo "前端镜像构建完成: ${FRONTEND_APP_NAME}:${IMAGE_TAG}"
+          '''
+        }
+      }
+    }
+
     stage('Deploy') {
       steps {
         sh '''
@@ -122,6 +139,23 @@ pipeline {
             ${APP_NAME}:${IMAGE_TAG}
 
           echo "部署完成: ${APP_NAME}:${IMAGE_TAG}"
+        '''
+      }
+    }
+
+    stage('Frontend Deploy') {
+      steps {
+        sh '''
+          docker stop ${FRONTEND_APP_NAME} || true
+          docker rm ${FRONTEND_APP_NAME} || true
+          docker run -d --name ${FRONTEND_APP_NAME} \
+            --add-host host.docker.internal:host-gateway \
+            -p ${FRONTEND_PORT}:80 \
+            --restart always \
+            -e BACKEND_HOST=host.docker.internal \
+            -e BACKEND_PORT=${APP_PORT} \
+            ${FRONTEND_APP_NAME}:${IMAGE_TAG}
+          echo "前端部署完成: ${FRONTEND_APP_NAME}:${IMAGE_TAG} (端口 ${FRONTEND_PORT})"
         '''
       }
     }
@@ -183,6 +217,31 @@ pipeline {
               docker rmi ${APP_NAME}:${IMAGE_TAG} || true
             '''
             error("健康检查失败，已回滚")
+          }
+        }
+      }
+    }
+
+    stage('Frontend Health Check') {
+      steps {
+        script {
+          def ok = sh(
+            script: '''
+              for i in $(seq 1 20); do
+                if curl -sf http://host.docker.internal:${FRONTEND_PORT}/ -o /dev/null; then
+                  echo "前端健康检查通过"
+                  exit 0
+                fi
+                echo "等待前端启动... ($i/20)"
+                sleep 3
+              done
+              echo "前端健康检查失败"
+              exit 1
+            ''',
+            returnStatus: true
+          ) == 0
+          if (!ok) {
+            error("前端健康检查失败")
           }
         }
       }
