@@ -24,5 +24,8 @@ ENV BACKEND_PORT=8081
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 
+# 把构建出的前端静态产物放入 Nginx 根目录（缺失这行会导致只显示 Welcome to nginx）
+COPY --from=build /app/dist /usr/share/nginx/html
+
 EXPOSE 80
 # 镜像自带 entrypoint 会先完成模板变量替换，再拉起 nginx
