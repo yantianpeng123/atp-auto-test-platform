@@ -104,6 +104,17 @@
               <el-input v-model="form.db.username" placeholder="用户名" />
             </div>
             <el-input v-model="form.db.password" placeholder="密码" show-password class="db-pwd" />
+            <div class="db-actions">
+              <el-button
+                type="primary"
+                plain
+                :icon="Link"
+                :loading="testingConnection"
+                @click="handleTestConnection"
+              >
+                测试链接
+              </el-button>
+            </div>
           </div>
         </el-form-item>
       </el-form>
@@ -118,9 +129,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Delete, Edit, Link, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createEnv, deleteEnv, getEnvList, updateEnv } from '@/api/env'
+import { createEnv, deleteEnv, getEnvList, testDbConnection, updateEnv } from '@/api/env'
 import type { DbConfig, EnvInfo } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
 
@@ -133,6 +144,7 @@ const projectStore = useProjectStore()
 
 const loading = ref(false)
 const submitting = ref(false)
+const testingConnection = ref(false)
 const list = ref<EnvInfo[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
@@ -249,6 +261,40 @@ function handleAddHeader() {
 
 function handleRemoveHeader(index: number) {
   form.headers.splice(index, 1)
+}
+
+/** 测试数据库连接：信息填写完整才允许点击，结果以弹框提示 */
+async function handleTestConnection() {
+  const { host, port, dbName, username, password } = form.db
+  const portStr = String(port ?? '').trim()
+  if (!host.trim() || !portStr || !dbName.trim() || !username.trim() || !password) {
+    ElMessage.warning('请先填写完整的数据库信息（主机、端口、库名、用户名、密码）')
+    return
+  }
+  if (!/^\d+$/.test(portStr)) {
+    ElMessage.warning('端口必须为数字')
+    return
+  }
+
+  testingConnection.value = true
+  try {
+    const ok = await testDbConnection({
+      host: host.trim(),
+      port: portStr,
+      dbName: dbName.trim(),
+      username: username.trim(),
+      password
+    })
+    if (ok) {
+      ElMessage.success('链接成功')
+    } else {
+      ElMessage.error('链接失败')
+    }
+  } catch {
+    ElMessage.error('链接失败')
+  } finally {
+    testingConnection.value = false
+  }
 }
 
 function buildHeadersJson(): string | undefined {
@@ -423,5 +469,10 @@ onMounted(loadList)
 
 .db-pwd {
   width: 100%;
+}
+
+.db-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

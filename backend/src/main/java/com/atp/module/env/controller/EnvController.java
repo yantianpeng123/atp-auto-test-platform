@@ -2,6 +2,7 @@ package com.atp.module.env.controller;
 
 import com.atp.common.result.PageResult;
 import com.atp.common.result.Result;
+import com.atp.module.env.dto.DbConnectionTestRequest;
 import com.atp.module.env.dto.EnvCreateRequest;
 import com.atp.module.env.dto.EnvUpdateRequest;
 import com.atp.module.env.service.EnvService;
@@ -64,5 +65,12 @@ public class EnvController {
     public Result<Void> delete(@PathVariable Long id) {
         envService.deleteEnv(id);
         return Result.ok("环境删除成功");
+    }
+
+    /** 测试数据库连接：返回 true=连接成功，false=连接失败（不抛异常，由前端提示） */
+    @PostMapping("/test-connection")
+    public Result<Boolean> testConnection(@Valid @RequestBody DbConnectionTestRequest request) {
+        boolean ok = envService.testDbConnection(request);
+        return Result.success(ok);
     }
 }

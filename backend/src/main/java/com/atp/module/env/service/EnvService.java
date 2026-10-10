@@ -1,5 +1,6 @@
 package com.atp.module.env.service;
 
+import com.atp.module.env.dto.DbConnectionTestRequest;
 import com.atp.module.env.dto.EnvCreateRequest;
 import com.atp.module.env.dto.EnvUpdateRequest;
 import com.atp.module.env.vo.EnvVO;
@@ -21,4 +22,7 @@ public interface EnvService {
 
     /** 删除环境（逻辑删除） */
     void deleteEnv(Long id);
+
+    /** 测试数据库连接是否可用 */
+    boolean testDbConnection(DbConnectionTestRequest request);
 }

@@ -3,6 +3,7 @@
  */
 import request from './request'
 import type {
+  DbConfig,
   EnvCreateParams,
   EnvInfo,
   EnvQuery,
@@ -31,4 +32,11 @@ export function updateEnv(data: EnvUpdateParams): Promise<null> {
 /** 删除环境 */
 export function deleteEnv(id: number): Promise<null> {
   return request.delete<unknown, Result<null>>(`/env/${id}`).then((res) => res.data)
+}
+
+/** 测试数据库连接：返回 true=成功，false=失败 */
+export function testDbConnection(data: DbConfig): Promise<boolean> {
+  return request
+    .post<unknown, Result<boolean>>('/env/test-connection', data)
+    .then((res) => res.data)
 }

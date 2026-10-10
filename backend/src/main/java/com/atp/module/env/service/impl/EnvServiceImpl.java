@@ -2,6 +2,7 @@ package com.atp.module.env.service.impl;
 
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
+import com.atp.module.env.dto.DbConnectionTestRequest;
 import com.atp.module.env.dto.EnvCreateRequest;
 import com.atp.module.env.dto.EnvUpdateRequest;
 import com.atp.module.env.entity.TestEnv;
@@ -14,10 +15,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.sql.DriverManager;
 import java.util.List;
 
 /**
@@ -25,6 +28,7 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EnvServiceImpl extends ServiceImpl<TestEnvMapper, TestEnv> implements EnvService {
 
     private final ObjectMapper objectMapper;
@@ -82,6 +86,22 @@ public class EnvServiceImpl extends ServiceImpl<TestEnvMapper, TestEnv> implemen
             throw new BizException(ResultCode.ENV_NOT_FOUND);
         }
         removeById(id);
+    }
+
+    @Override
+    public boolean testDbConnection(DbConnectionTestRequest request) {
+        // 仅支持 MySQL；超时 5s，避免测试时长时间阻塞
+        String url = String.format(
+                "jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=Asia/Shanghai"
+                        + "&connectTimeout=5000&socketTimeout=5000&allowPublicKeyRetrieval=true",
+                request.getHost(), request.getPort(), request.getDbName());
+        try (java.sql.Connection conn = DriverManager.getConnection(url, request.getUsername(), request.getPassword())) {
+            return conn != null && conn.isValid(3);
+        } catch (Exception e) {
+            log.warn("数据库连接测试失败 host={} port={} db={} : {}",
+                    request.getHost(), request.getPort(), request.getDbName(), e.getMessage());
+            return false;
+        }
     }
 
     /** 同一项目下环境名称不可重复 */
