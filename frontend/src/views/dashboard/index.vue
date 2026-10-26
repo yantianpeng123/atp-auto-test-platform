@@ -30,7 +30,7 @@
           <div class="stat-value">{{ item.value }}</div>
           <div class="stat-label">{{ item.label }}</div>
         </div>
-        <el-tag size="small" type="info" effect="plain">待接入</el-tag>
+        <el-tag size="small" type="success" effect="plain">实时</el-tag>
       </el-card>
     </section>
 
@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   Connection,
   DataAnalysis,
@@ -92,6 +92,7 @@ import {
   Timer
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { getDashboardStats } from '@/api/dashboard'
 
 const userStore = useUserStore()
 
@@ -108,12 +109,33 @@ const lastLoginText = computed(() => {
   return String(time).replace('T', ' ').slice(0, 19)
 })
 
-const statCards = [
+interface StatCard {
+  label: string
+  value: string
+  icon: unknown
+  color: string
+  bg: string
+}
+
+const statCards = ref<StatCard[]>([
   { label: '项目总数', value: '--', icon: Files, color: '#1d63d1', bg: '#e8f0fd' },
   { label: '用例总数', value: '--', icon: Connection, color: '#0f6e56', bg: '#e2f4ee' },
   { label: '本月执行', value: '--', icon: Timer, color: '#854f0b', bg: '#fbf0dc' },
   { label: '通过率', value: '--', icon: DataAnalysis, color: '#993556', bg: '#fbe9f0' }
-]
+])
+
+onMounted(async () => {
+  try {
+    const stats = await getDashboardStats()
+    statCards.value[0].value = String(stats.projectCount)
+    statCards.value[1].value = String(stats.caseCount)
+    statCards.value[2].value = String(stats.monthExecutionCount)
+    const rate = stats.passRate
+    statCards.value[3].value = (Number.isInteger(rate) ? rate : rate.toFixed(1)) + '%'
+  } catch {
+    // 拉取失败时保持 '--' 占位，不阻断页面其余内容
+  }
+})
 
 type StageType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
 

@@ -842,3 +842,15 @@ export interface CiConfigSaveParams {
   /** 是否启用：true 启用（新建时由后端强制置 1） */
   enabled?: boolean | null
 }
+
+/** 工作台统计卡片数据（全平台聚合） */
+export interface DashboardStats {
+  /** 项目总数 */
+  projectCount: number
+  /** 用例总数 */
+  caseCount: number
+  /** 本月执行次数 */
+  monthExecutionCount: number
+  /** 通过率（百分比，保留 1 位小数，如 85.7 表示 85.7%） */
+  passRate: number
+}
