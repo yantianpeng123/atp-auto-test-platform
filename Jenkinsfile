@@ -1,7 +1,7 @@
 pipeline {
   agent any
   environment {
-    ATP_BASE   = 'http://host.docker.internal:8081'
+    ATP_BASE   = 'http://host.docker.internal:9090'
     PROJECT_ID = '3'
     BATCH_ID   = '2'
     APP_NAME   = 'atp-app'
