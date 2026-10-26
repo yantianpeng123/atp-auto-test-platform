@@ -4,17 +4,11 @@
     <section class="welcome">
       <div class="welcome-text">
         <h2>你好，{{ userStore.displayName }}</h2>
-        <p>
-          第一阶段（架构 + 用户认证）已跑通，下面可以开始搭建测试资产模块了。
-        </p>
+       
         <div class="welcome-meta">
           <el-tag size="small" effect="dark" type="primary">{{ roleText }}</el-tag>
           <span>上次登录：{{ lastLoginText }}</span>
         </div>
-      </div>
-      <div class="welcome-badge">
-        <div class="badge-num">1 / 5</div>
-        <div class="badge-label">阶段进度</div>
       </div>
     </section>
 
@@ -33,53 +27,6 @@
         <el-tag size="small" type="success" effect="plain">实时</el-tag>
       </el-card>
     </section>
-
-    <div class="grid">
-      <!-- 路线图 -->
-      <el-card shadow="never" class="card">
-        <template #header>
-          <span class="card-title">开发路线图</span>
-        </template>
-        <el-timeline>
-          <el-timeline-item
-            v-for="stage in stages"
-            :key="stage.name"
-            :type="stage.type"
-            :hollow="stage.hollow"
-            :timestamp="stage.period"
-            placement="top"
-          >
-            <div class="stage-name">{{ stage.name }}</div>
-            <div class="stage-desc">{{ stage.desc }}</div>
-          </el-timeline-item>
-        </el-timeline>
-      </el-card>
-
-      <!-- 已就绪接口 -->
-      <el-card shadow="never" class="card">
-        <template #header>
-          <span class="card-title">已就绪接口（第一阶段）</span>
-        </template>
-        <el-table :data="apiList" size="small" style="width: 100%">
-          <el-table-column prop="method" label="方法" width="76">
-            <template #default="{ row }">
-              <el-tag :type="row.method === 'GET' ? 'success' : 'primary'" size="small" effect="plain">
-                {{ row.method }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="path" label="路径" min-width="180" />
-          <el-table-column prop="desc" label="说明" min-width="110" />
-        </el-table>
-
-        <div class="tech-stack">
-          <span class="tech-label">技术栈</span>
-          <el-tag v-for="tag in techStack" :key="tag" size="small" effect="plain" class="tech-tag">
-            {{ tag }}
-          </el-tag>
-        </div>
-      </el-card>
-    </div>
   </div>
 </template>
 
