@@ -15,4 +15,10 @@ public class VersionUpdateRequest {
 
     @NotBlank(message = "版本名称不能为空")
     private String name;
+
+    /** 所属工程ID，可空；为空时沿用原工程（用于重新归属） */
+    private Long applicationId;
+
+    /** 工程描述，可空；不为 null 时同步覆盖所属工程的 description */
+    private String description;
 }

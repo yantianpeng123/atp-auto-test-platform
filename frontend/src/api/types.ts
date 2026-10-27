@@ -137,6 +137,8 @@ export interface ApplicationUpdateParams {
 export interface VersionUpdateParams {
   id: number
   name: string
+  applicationId?: number
+  description?: string
 }
 
 /**

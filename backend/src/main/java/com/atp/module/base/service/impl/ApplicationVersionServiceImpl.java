@@ -60,22 +60,41 @@ public class ApplicationVersionServiceImpl extends ServiceImpl<ApplicationVersio
     }
 
     @Override
-    public void renameVersion(Long id, String name) {
+    @Transactional(rollbackFor = Exception.class)
+    public void renameVersion(Long id, String name, Long applicationId, String description) {
         ApplicationVersion version = getById(id);
         if (version == null) {
             throw new BizException(ResultCode.VERSION_NOT_FOUND);
         }
+        Long targetAppId = (applicationId != null) ? applicationId : version.getApplicationId();
+        // 校验归属工程存在
+        Application app = applicationService.getById(targetAppId);
+        if (app == null) {
+            throw new BizException(ResultCode.PROJECT_NOT_FOUND);
+        }
         if (!version.getName().equals(name)) {
             long count = lambdaQuery()
-                    .eq(ApplicationVersion::getApplicationId, version.getApplicationId())
+                    .eq(ApplicationVersion::getApplicationId, targetAppId)
                     .eq(ApplicationVersion::getName, name)
+                    .ne(ApplicationVersion::getId, id)
                     .count();
             if (count > 0) {
                 throw new BizException(ResultCode.VERSION_NAME_EXISTS);
             }
         }
         version.setName(name);
+        if (applicationId != null && !applicationId.equals(version.getApplicationId())) {
+            version.setApplicationId(applicationId);
+        }
         updateById(version);
+
+        // 工程描述非空则同步更新归属工程（与新增版本语义一致）
+        if (StringUtils.hasText(description)) {
+            applicationService.lambdaUpdate()
+                    .eq(Application::getId, targetAppId)
+                    .set(Application::getDescription, description)
+                    .update();
+        }
     }
 
     @Override

@@ -147,7 +147,7 @@ public class BaseDataController {
     /** 重命名版本 */
     @PutMapping("/version")
     public Result<Void> renameVersion(@Valid @RequestBody VersionUpdateRequest request) {
-        versionService.renameVersion(request.getId(), request.getName());
+        versionService.renameVersion(request.getId(), request.getName(), request.getApplicationId(), request.getDescription());
         return Result.ok("版本更新成功");
     }
 

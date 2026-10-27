@@ -385,22 +385,21 @@ const renameTitle = computed(() => `编辑${levelLabelMap[renameForm.level]}`)
 
 function handleEdit(row: VersionInfo) {
   const level = rowLevel(row)
-  if (level === 'project') {
-    // 仅工程：复用「新增」弹窗，类型锁定为「工程」并置灰，名称/描述可改
+  if (level === 'project' || level === 'version') {
+    // 仅工程 / 工程+版本：复用「新增」弹窗，类型锁定且置灰，名称/描述/工程可改
     resetForm()
     editMode.value = true
-    editId.value = row.applicationId as number
-    form.type = 'PROJECT'
-    form.name = row.applicationName
+    editId.value = (level === 'project' ? row.applicationId : row.versionId) as number
+    form.type = level === 'project' ? 'PROJECT' : 'VERSION'
+    form.name = level === 'project' ? row.applicationName : row.versionName
+    form.applicationId = level === 'version' ? row.applicationId : undefined
     form.description = row.applicationDescription ?? ''
     dialogVisible.value = true
     return
   }
-  renameForm.id =
-    (level === 'module' ? row.moduleId : row.versionId) as number
-  renameForm.name =
-    level === 'module' ? row.moduleName : row.versionName
-  renameForm.level = level
+  renameForm.id = row.moduleId as number
+  renameForm.name = row.moduleName
+  renameForm.level = 'module'
   renameVisible.value = true
 }
 
@@ -579,11 +578,20 @@ async function handleSubmit() {
         await createProject({ projectId: projectStore.currentProject!.id, name: form.name, description: form.description })
       }
     } else if (form.type === 'VERSION') {
-      await createVersion({ applicationId: form.applicationId!, name: form.name, description: form.description })
+      if (editMode.value) {
+        await updateVersion({
+          id: editId.value as number,
+          name: form.name,
+          applicationId: form.applicationId!,
+          description: form.description
+        })
+      } else {
+        await createVersion({ applicationId: form.applicationId!, name: form.name, description: form.description })
+      }
     } else {
       await createModules({ versionId: form.versionId!, names: moduleList.value, description: form.description })
     }
-    ElMessage.success(editMode.value ? '工程更新成功' : `${typeLabel.value}新增成功`)
+    ElMessage.success(editMode.value ? `${typeLabel.value}更新成功` : `${typeLabel.value}新增成功`)
     dialogVisible.value = false
     await loadProjectOptions()
     handleSearch()
