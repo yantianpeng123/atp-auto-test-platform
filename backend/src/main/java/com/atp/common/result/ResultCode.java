@@ -38,6 +38,7 @@ public enum ResultCode {
     VERSION_NAME_EXISTS(2004, "版本名称已存在"),
     MODULE_NOT_FOUND(2005, "模块不存在"),
     MODULE_NAME_EXISTS(2006, "模块名称已存在"),
+    MODULE_HAS_API(2007, "该模块下存在接口无法删除,请确认"),
     ENV_NOT_FOUND(2101, "环境不存在"),
     ENV_NAME_EXISTS(2102, "同一项目下环境名称已存在"),
     CASE_NOT_FOUND(3001, "用例不存在"),

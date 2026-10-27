@@ -23,6 +23,11 @@ public interface ApplicationModuleService extends IService<ApplicationModule> {
     void renameModule(Long id, String name);
 
     /**
+     * 删除模块（逻辑删除，模块下存在接口时禁止删除）
+     */
+    void removeModule(Long id);
+
+    /**
      * 工程版本信息分页查询
      */
     IPage<VersionInfoVO> selectVersionInfoPage(long page, long size,

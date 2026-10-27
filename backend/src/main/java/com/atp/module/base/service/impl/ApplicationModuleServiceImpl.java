@@ -2,10 +2,13 @@ package com.atp.module.base.service.impl;
 
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
+import com.atp.module.base.entity.ApiDefinition;
 import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
+import com.atp.module.base.mapper.ApiDefinitionMapper;
 import com.atp.module.base.mapper.ApplicationModuleMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.atp.module.base.service.ApplicationModuleService;
 import com.atp.module.base.service.ApplicationService;
 import com.atp.module.base.service.ApplicationVersionService;
@@ -30,6 +33,7 @@ public class ApplicationModuleServiceImpl extends ServiceImpl<ApplicationModuleM
 
     private final ApplicationService applicationService;
     private final ApplicationVersionService versionService;
+    private final ApiDefinitionMapper apiDefinitionMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -83,6 +87,21 @@ public class ApplicationModuleServiceImpl extends ServiceImpl<ApplicationModuleM
         }
         module.setName(name);
         updateById(module);
+    }
+
+    @Override
+    public void removeModule(Long id) {
+        ApplicationModule module = getById(id);
+        if (module == null) {
+            throw new BizException(ResultCode.MODULE_NOT_FOUND);
+        }
+        // 模块下存在未删除的接口则禁止删除
+        long apiCount = apiDefinitionMapper.selectCount(
+                new LambdaQueryWrapper<ApiDefinition>().eq(ApiDefinition::getModuleId, id));
+        if (apiCount > 0) {
+            throw new BizException(ResultCode.MODULE_HAS_API);
+        }
+        removeById(id);
     }
 
     @Override

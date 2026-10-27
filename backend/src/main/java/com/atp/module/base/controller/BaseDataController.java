@@ -126,7 +126,7 @@ public class BaseDataController {
     /** 删除模块（逻辑删除） */
     @DeleteMapping("/module/{id}")
     public Result<Void> deleteModule(@PathVariable Long id) {
-        moduleService.removeById(id);
+        moduleService.removeModule(id);
         return Result.ok("模块删除成功");
     }
 
