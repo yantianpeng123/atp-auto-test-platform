@@ -59,7 +59,7 @@ public class ApiComponentController {
         return Result.ok("组件修改成功");
     }
 
-    /** 删除组件 */
+    /** 删除组件1 */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         apiComponentService.deleteComponent(id);
