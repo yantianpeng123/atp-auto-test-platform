@@ -180,8 +180,8 @@
         </el-form-item>
 
         <!-- 编辑模块时：当前模块名称回显（新增模块的「模块名称」添加区保持原有功能不受影响） -->
-        <el-form-item v-if="editMode && form.type === 'MODULE'" label="当前模块名称">
-          <el-input v-model="editModuleName" placeholder="请输入模块名称" clearable maxlength="100" />
+        <el-form-item v-if="editMode && form.type === 'MODULE'" label="">
+          <el-input v-model="editModuleName" placeholder="请输入模块名称" clearable maxlength="50" />
         </el-form-item>
       </el-form>
 

@@ -94,43 +94,7 @@ interface Stage {
   hollow: boolean
 }
 
-const stages: Stage[] = [
-  {
-    name: '第一阶段：架构梳理 + 用户认证',
-    desc: '前后端工程骨架、统一返回体、JWT 鉴权、登录注册页',
-    period: '已完成',
-    type: 'success',
-    hollow: false
-  },
-  {
-    name: '第二阶段：项目管理 + 接口与用例',
-    desc: '项目 CRUD、环境管理、接口定义、用例增删改查',
-    period: '待开始',
-    type: 'primary',
-    hollow: true
-  },
-  {
-    name: '第三阶段：执行引擎 + 测试计划',
-    desc: 'HTTP 执行器、断言校验、Cron 调度、并发执行',
-    period: '待开始',
-    type: 'info',
-    hollow: true
-  },
-  {
-    name: '第四阶段：报告中心 + 通知',
-    desc: '执行明细、通过率趋势图、邮件与企业微信推送',
-    period: '待开始',
-    type: 'info',
-    hollow: true
-  },
-  {
-    name: '第五阶段：CI 集成 + 权限细化',
-    desc: 'Jenkins/GitLab 触发、项目级 RBAC、性能优化',
-    period: '待开始',
-    type: 'info',
-    hollow: true
-  }
-]
+
 
 const apiList = [
   { method: 'POST', path: '/api/auth/register', desc: '用户注册' },
