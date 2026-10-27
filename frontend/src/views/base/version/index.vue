@@ -99,10 +99,10 @@
       />
     </el-card>
 
-    <!-- 新增 / 编辑工程 共用弹窗（编辑时类型为「工程」且置灰） -->
+    <!-- 新增 / 编辑 共用弹窗（编辑时类型为对应层级且置灰） -->
     <el-dialog
       v-model="dialogVisible"
-      :title="editMode ? '编辑工程' : '新增'"
+      :title="editMode ? `编辑${typeLabel}` : '新增'"
       width="520px"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
@@ -177,6 +177,11 @@
               <el-button link type="danger" :icon="Delete" @click="handleRemoveModule(index)">删除</el-button>
             </div>
           </div>
+        </el-form-item>
+
+        <!-- 编辑模块时：当前模块名称回显（新增模块的「模块名称」添加区保持原有功能不受影响） -->
+        <el-form-item v-if="editMode && form.type === 'MODULE'" label="当前模块名称">
+          <el-input v-model="editModuleName" placeholder="请输入模块名称" clearable maxlength="100" />
         </el-form-item>
       </el-form>
 
@@ -383,8 +388,23 @@ function rowLevel(row: VersionInfo): RowLevel {
 
 const renameTitle = computed(() => `编辑${levelLabelMap[renameForm.level]}`)
 
-function handleEdit(row: VersionInfo) {
+async function handleEdit(row: VersionInfo) {
   const level = rowLevel(row)
+  if (level === 'module') {
+    // 工程+版本+模块：复用「新增」弹窗，类型锁定为「模块」且置灰；工程/版本下拉可选；描述、模块名回显
+    resetForm()
+    editMode.value = true
+    editId.value = row.moduleId as number
+    form.type = 'MODULE'
+    form.applicationId = row.applicationId ?? undefined
+    form.description = row.applicationDescription ?? ''
+    editModuleName.value = row.moduleName ?? ''
+    // 加载弹窗内版本下拉（随工程联动），并回显当前版本
+    dialogVersionOptions.value = form.applicationId ? await getVersionOptions(form.applicationId) : []
+    form.versionId = row.versionId ?? undefined
+    dialogVisible.value = true
+    return
+  }
   if (level === 'project' || level === 'version') {
     // 仅工程 / 工程+版本：复用「新增」弹窗，类型锁定且置灰，名称/描述/工程可改
     resetForm()
@@ -463,6 +483,8 @@ const formEl = ref<FormInstance>()
 // 编辑工程模式：复用新增弹窗，类型锁定为「工程」且置灰
 const editMode = ref(false)
 const editId = ref<number | null>(null)
+// 编辑模块时回显的当前模块名称（与新增页的「模块名称」添加区互不干扰）
+const editModuleName = ref('')
 
 const typeOptions = [
   { label: '工程', value: 'PROJECT' },
@@ -527,6 +549,7 @@ function resetForm() {
   form.description = ''
   form.moduleName = ''
   moduleList.value = []
+  editModuleName.value = ''
   dialogVersionOptions.value = []
 }
 
@@ -589,7 +612,16 @@ async function handleSubmit() {
         await createVersion({ applicationId: form.applicationId!, name: form.name, description: form.description })
       }
     } else {
-      await createModules({ versionId: form.versionId!, names: moduleList.value, description: form.description })
+      if (editMode.value) {
+        const name = editModuleName.value.trim()
+        if (!name) {
+          ElMessage.warning('模块名称不能为空')
+          return
+        }
+        await updateModule({ id: editId.value as number, name })
+      } else {
+        await createModules({ versionId: form.versionId!, names: moduleList.value, description: form.description })
+      }
     }
     ElMessage.success(editMode.value ? `${typeLabel.value}更新成功` : `${typeLabel.value}新增成功`)
     dialogVisible.value = false
