@@ -18,6 +18,11 @@ public interface ApplicationModuleService extends IService<ApplicationModule> {
     void createModules(Long versionId, List<String> names, String description);
 
     /**
+     * 重命名模块（同名版本下唯一）
+     */
+    void renameModule(Long id, String name);
+
+    /**
      * 工程版本信息分页查询
      */
     IPage<VersionInfoVO> selectVersionInfoPage(long page, long size,

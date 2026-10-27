@@ -3,6 +3,7 @@ package com.atp.module.base.controller;
 import com.atp.common.result.Result;
 import com.atp.module.base.dto.ApplicationCreateRequest;
 import com.atp.module.base.dto.ModuleCreateRequest;
+import com.atp.module.base.dto.ModuleUpdateRequest;
 import com.atp.module.base.dto.VersionCreateRequest;
 import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
@@ -16,8 +17,11 @@ import com.atp.module.base.vo.VersionInfoVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -108,5 +112,19 @@ public class BaseDataController {
                 .size(result.getSize())
                 .build();
         return Result.success(pageResult);
+    }
+
+    /** 重命名模块 */
+    @PutMapping("/module")
+    public Result<Void> renameModule(@Valid @RequestBody ModuleUpdateRequest request) {
+        moduleService.renameModule(request.getId(), request.getName());
+        return Result.ok("模块更新成功");
+    }
+
+    /** 删除模块（逻辑删除） */
+    @DeleteMapping("/module/{id}")
+    public Result<Void> deleteModule(@PathVariable Long id) {
+        moduleService.removeById(id);
+        return Result.ok("模块删除成功");
     }
 }

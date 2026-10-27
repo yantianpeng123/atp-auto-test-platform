@@ -67,6 +67,25 @@ public class ApplicationModuleServiceImpl extends ServiceImpl<ApplicationModuleM
     }
 
     @Override
+    public void renameModule(Long id, String name) {
+        ApplicationModule module = getById(id);
+        if (module == null) {
+            throw new BizException(ResultCode.MODULE_NOT_FOUND);
+        }
+        if (!module.getName().equals(name)) {
+            long count = lambdaQuery()
+                    .eq(ApplicationModule::getVersionId, module.getVersionId())
+                    .eq(ApplicationModule::getName, name)
+                    .count();
+            if (count > 0) {
+                throw new BizException(ResultCode.MODULE_NAME_EXISTS);
+            }
+        }
+        module.setName(name);
+        updateById(module);
+    }
+
+    @Override
     public IPage<VersionInfoVO> selectVersionInfoPage(long page, long size,
                                                       Long projectId, Long applicationId, Long versionId, Long moduleId) {
         Page<VersionInfoVO> pageParam = new Page<>(page, size);

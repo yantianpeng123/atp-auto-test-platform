@@ -119,6 +119,12 @@ export interface ModuleCreateParams {
   description?: string
 }
 
+/** 模块重命名入参 */
+export interface ModuleUpdateParams {
+  id: number
+  name: string
+}
+
 /**
  * 项目
  */

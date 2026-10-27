@@ -9,6 +9,7 @@ import type {
   ApiUpdateParams,
   ApplicationCreateParams,
   ModuleCreateParams,
+  ModuleUpdateParams,
   OptionItem,
   PageResult,
   Result,
@@ -58,6 +59,16 @@ export function createVersion(data: VersionCreateParams): Promise<null> {
 /** 新增模块 */
 export function createModules(data: ModuleCreateParams): Promise<null> {
   return request.post<unknown, Result<null>>('/base/module', data).then((res) => res.data)
+}
+
+/** 重命名模块 */
+export function updateModule(data: ModuleUpdateParams): Promise<null> {
+  return request.put<unknown, Result<null>>('/base/module', data).then((res) => res.data)
+}
+
+/** 删除模块 */
+export function deleteModule(id: number): Promise<null> {
+  return request.delete<unknown, Result<null>>(`/base/module/${id}`).then((res) => res.data)
 }
 
 /** 接口列表分页查询 */

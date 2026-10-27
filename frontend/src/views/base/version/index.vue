@@ -8,7 +8,7 @@
         </div>
       </template>
 
-      <!-- 查询条件区 -->
+      <!-- 查询条件区（保持不变） -->
       <div class="filter-bar">
         <el-form :inline="true" :model="query" class="filter-form">
           <el-form-item label="工程名称">
@@ -57,17 +57,37 @@
         </el-form>
       </div>
 
-      <!-- 结果列表 -->
-      <el-table :data="list" v-loading="loading" empty-text="暂无数据，请调整查询条件后重试" style="width: 100%">
-        <el-table-column prop="moduleId" label="ID" width="80" />
-        <el-table-column prop="applicationName" label="工程名称" min-width="140" />
-        <el-table-column prop="versionName" label="版本名称" min-width="120">
+      <!-- 结果列表：工程/版本跨行合并 -->
+      <el-table
+        :data="list"
+        v-loading="loading"
+        empty-text="暂无数据，请调整查询条件后重试"
+        style="width: 100%"
+        :span-method="objectSpanMethod"
+        border
+      >
+        <el-table-column prop="applicationName" label="工程名称" min-width="160" />
+        <el-table-column prop="versionName" label="版本名称" min-width="140">
           <template #default="{ row }">
-            <el-tag type="primary" effect="plain">{{ row.versionName }}</el-tag>
+            <span v-if="row.versionName">{{ row.versionName }}</span>
+            <span v-else class="empty-cell">—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="moduleName" label="模块名称" min-width="140" />
-        <el-table-column prop="updateTime" label="更新时间" width="170" />
+        <el-table-column prop="moduleName" label="模块名称" min-width="160">
+          <template #default="{ row }">
+            <span v-if="row.moduleName">{{ row.moduleName }}</span>
+            <span v-else class="empty-cell">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="140" fixed="right">
+          <template #default="{ row }">
+            <template v-if="row.moduleId != null">
+              <el-button link type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+              <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            </template>
+            <span v-else class="empty-cell">—</span>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-pagination
@@ -82,7 +102,7 @@
       />
     </el-card>
 
-    <!-- 新增弹窗 -->
+    <!-- 新增弹窗（保持不变） -->
     <el-dialog
       v-model="dialogVisible"
       title="新增"
@@ -168,21 +188,42 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑模块弹窗 -->
+    <el-dialog
+      v-model="renameVisible"
+      title="编辑模块"
+      width="480px"
+      :close-on-click-modal="false"
+      @closed="renameForm.name = ''"
+    >
+      <el-form label-width="90px" class="create-form">
+        <el-form-item label="模块名称" prop="name">
+          <el-input v-model="renameForm.name" placeholder="请输入模块名称" maxlength="100" clearable />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="renameVisible = false">取消</el-button>
+        <el-button type="primary" :loading="renameLoading" @click="handleRenameConfirm">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Delete, Plus, Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   createModules,
   createProject,
   createVersion,
+  deleteModule,
   getModuleOptions,
   getProjectOptions,
   getVersionList,
-  getVersionOptions
+  getVersionOptions,
+  updateModule
 } from '@/api/base'
 import type { OptionItem, VersionInfo } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
@@ -205,6 +246,59 @@ const query = reactive({
   page: 1,
   size: 10
 })
+
+/* ==================== 合并单元格 ==================== */
+
+// 合并单元格所需的 rowspan 数组（与 list 下标一一对应）
+const appSpan = ref<number[]>([])
+const versionSpan = ref<number[]>([])
+
+// 排序键：null 视为最大，保证分组相邻且稳定
+function sortKey(v: number | null | undefined): number {
+  return v == null ? Number.MAX_SAFE_INTEGER : v
+}
+
+// 按 工程 → 版本 → 模块 排序，保证 span-method 合并时相邻
+function sortForMerge(rows: VersionInfo[]): VersionInfo[] {
+  return [...rows].sort(
+    (a, b) =>
+      sortKey(a.applicationId) - sortKey(b.applicationId) ||
+      sortKey(a.versionId) - sortKey(b.versionId) ||
+      sortKey(a.moduleId) - sortKey(b.moduleId)
+  )
+}
+
+// 计算工程列、版本列的 rowspan
+function computeSpans(rows: VersionInfo[]): { app: number[]; ver: number[] } {
+  const app = new Array(rows.length).fill(1)
+  const ver = new Array(rows.length).fill(1)
+  let i = 0
+  while (i < rows.length) {
+    // 同一工程分组
+    let j = i
+    while (j < rows.length && rows[j].applicationId === rows[i].applicationId) j++
+    app[i] = j - i
+    for (let k = i + 1; k < j; k++) app[k] = 0
+    // 工程内按版本分组
+    let v = i
+    while (v < j) {
+      let w = v
+      while (w < j && rows[w].versionId === rows[v].versionId) w++
+      ver[v] = w - v
+      for (let k = v + 1; k < w; k++) ver[k] = 0
+      v = w
+    }
+    i = j
+  }
+  return { app, ver }
+}
+
+// el-table span-method：第 0 列合并工程，第 1 列合并版本
+function objectSpanMethod({ rowIndex, columnIndex }: any): number[] {
+  if (columnIndex === 0) return [appSpan.value[rowIndex] ?? 1, 1]
+  if (columnIndex === 1) return [versionSpan.value[rowIndex] ?? 1, 1]
+  return [1, 1]
+}
 
 async function loadProjectOptions() {
   projectOptions.value = await getProjectOptions(projectStore.currentProject?.id)
@@ -229,7 +323,11 @@ async function handleSearch() {
       page: query.page,
       size: query.size
     })
-    list.value = result.records
+    const sorted = sortForMerge(result.records || [])
+    const spans = computeSpans(sorted)
+    appSpan.value = spans.app
+    versionSpan.value = spans.ver
+    list.value = sorted
     total.value = result.total
   } finally {
     loading.value = false
@@ -262,7 +360,52 @@ function handleReset() {
   handleSearch()
 }
 
-/* ==================== 新增 ==================== */
+/* ==================== 编辑 / 删除 ==================== */
+
+const renameVisible = ref(false)
+const renameLoading = ref(false)
+const renameForm = reactive({ id: 0, name: '' })
+
+function handleEdit(row: VersionInfo) {
+  renameForm.id = row.moduleId as number
+  renameForm.name = row.moduleName
+  renameVisible.value = true
+}
+
+async function handleRenameConfirm() {
+  const name = renameForm.name.trim()
+  if (!name) {
+    ElMessage.warning('模块名称不能为空')
+    return
+  }
+  renameLoading.value = true
+  try {
+    await updateModule({ id: renameForm.id, name })
+    ElMessage.success('模块更新成功')
+    renameVisible.value = false
+    await handleSearch()
+  } finally {
+    renameLoading.value = false
+  }
+}
+
+async function handleDelete(row: VersionInfo) {
+  if (row.moduleId == null) return
+  try {
+    await ElMessageBox.confirm(`确认删除模块「${row.moduleName}」？删除后不可恢复。`, '提示', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  await deleteModule(row.moduleId)
+  ElMessage.success('模块删除成功')
+  await handleSearch()
+}
+
+/* ==================== 新增（保持不变） ==================== */
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -478,5 +621,10 @@ onMounted(async () => {
 
 .module-row :deep(.el-input) {
   flex: 1;
+}
+
+/* 列表空值占位 */
+.empty-cell {
+  color: #c0c4cc;
 }
 </style>
