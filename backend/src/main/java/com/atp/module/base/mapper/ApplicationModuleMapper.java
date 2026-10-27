@@ -20,21 +20,21 @@ public interface ApplicationModuleMapper extends BaseMapper<ApplicationModule> {
      */
     @Select("""
             SELECT m.id AS moduleId,
-                   m.name AS moduleName,
-                   v.id AS versionId,
-                   v.name AS versionName,
-                   a.id AS applicationId,
-                   a.name AS applicationName,
-                   m.update_time AS updateTime
-            FROM tb_application_module m
-            JOIN tb_application_version v ON m.version_id = v.id AND v.deleted = 0
-            JOIN tb_application a ON v.application_id = a.id AND a.deleted = 0
-            WHERE m.deleted = 0
+                               m.name AS moduleName,
+                               v.id AS versionId,
+                               v.name AS versionName,
+                               a.id AS applicationId,
+                               a.name AS applicationName,
+                               m.update_time AS updateTime
+                        from tb_application a
+                left join tb_application_version v on a.id = v.application_id
+                left join tb_application_module m on v.id = m.version_id
+                        WHERE a.deleted = 0
               AND (#{projectId} IS NULL OR a.project_id = #{projectId})
               AND (#{applicationId} IS NULL OR a.id = #{applicationId})
               AND (#{versionId} IS NULL OR v.id = #{versionId})
               AND (#{moduleId} IS NULL OR m.id = #{moduleId})
-            ORDER BY m.update_time DESC
+            ORDER BY COALESCE(m.update_time, v.update_time, a.update_time) DESC
             """)
     IPage<VersionInfoVO> selectVersionInfoPage(Page<VersionInfoVO> page,
                                                @Param("projectId") Long projectId,
