@@ -587,7 +587,8 @@ async function handleSubmit() {
   const valid = await formEl.value.validate().catch(() => false)
   if (!valid) return
 
-  if (form.type === 'MODULE' && moduleList.value.length === 0) {
+  // 新增模块时至少添加一个；编辑模块时允许仅更新当前模块名（moduleList 可空）
+  if (form.type === 'MODULE' && !editMode.value && moduleList.value.length === 0) {
     ElMessage.warning('请至少添加一个模块名称')
     return
   }
@@ -613,12 +614,23 @@ async function handleSubmit() {
       }
     } else {
       if (editMode.value) {
-        const name = editModuleName.value.trim()
-        if (!name) {
-          ElMessage.warning('模块名称不能为空')
+        // 编辑模块：① 更新当前模块名（若填写）② 创建新增模块（若添加）
+        const currentName = editModuleName.value.trim()
+        const hasNew = moduleList.value.length > 0
+        if (!currentName && !hasNew) {
+          ElMessage.warning('请至少填写当前模块名称或添加一个新模块')
           return
         }
-        await updateModule({ id: editId.value as number, name })
+        if (currentName) {
+          await updateModule({ id: editId.value as number, name: currentName })
+        }
+        if (hasNew) {
+          await createModules({
+            versionId: form.versionId!,
+            names: moduleList.value,
+            description: form.description
+          })
+        }
       } else {
         await createModules({ versionId: form.versionId!, names: moduleList.value, description: form.description })
       }
