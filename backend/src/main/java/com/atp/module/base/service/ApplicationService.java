@@ -18,4 +18,14 @@ public interface ApplicationService extends IService<Application> {
      * 新增工程（校验名称唯一）
      */
     void createApplication(ApplicationCreateRequest request);
+
+    /**
+     * 重命名工程（同项目下名称唯一）
+     */
+    void renameApplication(Long id, String name);
+
+    /**
+     * 删除工程（级联逻辑删除其版本与模块）
+     */
+    void removeApplication(Long id);
 }

@@ -2,9 +2,11 @@ package com.atp.module.base.controller;
 
 import com.atp.common.result.Result;
 import com.atp.module.base.dto.ApplicationCreateRequest;
+import com.atp.module.base.dto.ApplicationUpdateRequest;
 import com.atp.module.base.dto.ModuleCreateRequest;
 import com.atp.module.base.dto.ModuleUpdateRequest;
 import com.atp.module.base.dto.VersionCreateRequest;
+import com.atp.module.base.dto.VersionUpdateRequest;
 import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
@@ -126,5 +128,33 @@ public class BaseDataController {
     public Result<Void> deleteModule(@PathVariable Long id) {
         moduleService.removeById(id);
         return Result.ok("模块删除成功");
+    }
+
+    /** 重命名工程 */
+    @PutMapping("/project")
+    public Result<Void> renameApplication(@Valid @RequestBody ApplicationUpdateRequest request) {
+        applicationService.renameApplication(request.getId(), request.getName());
+        return Result.ok("工程更新成功");
+    }
+
+    /** 删除工程（级联逻辑删除其版本与模块） */
+    @DeleteMapping("/project/{id}")
+    public Result<Void> deleteApplication(@PathVariable Long id) {
+        applicationService.removeApplication(id);
+        return Result.ok("工程删除成功");
+    }
+
+    /** 重命名版本 */
+    @PutMapping("/version")
+    public Result<Void> renameVersion(@Valid @RequestBody VersionUpdateRequest request) {
+        versionService.renameVersion(request.getId(), request.getName());
+        return Result.ok("版本更新成功");
+    }
+
+    /** 删除版本（级联逻辑删除其模块） */
+    @DeleteMapping("/version/{id}")
+    public Result<Void> deleteVersion(@PathVariable Long id) {
+        versionService.removeVersion(id);
+        return Result.ok("版本删除成功");
     }
 }

@@ -81,11 +81,8 @@
         </el-table-column>
         <el-table-column label="操作" min-width="140" fixed="right">
           <template #default="{ row }">
-            <template v-if="row.moduleId != null">
-              <el-button link type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-              <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
-            </template>
-            <span v-else class="empty-cell">—</span>
+            <el-button link type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -189,10 +186,10 @@
       </template>
     </el-dialog>
 
-    <!-- 编辑模块弹窗 -->
+    <!-- 编辑弹窗（工程/版本/模块通用） -->
     <el-dialog
       v-model="renameVisible"
-      title="编辑模块"
+      :title="renameTitle"
       width="480px"
       :close-on-click-modal="false"
       @closed="renameForm.name = ''"
@@ -219,11 +216,15 @@ import {
   createProject,
   createVersion,
   deleteModule,
+  deleteProject,
+  deleteVersion,
   getModuleOptions,
   getProjectOptions,
   getVersionList,
   getVersionOptions,
-  updateModule
+  updateModule,
+  updateProject,
+  updateVersion
 } from '@/api/base'
 import type { OptionItem, VersionInfo } from '@/api/types'
 import { useProjectStore } from '@/stores/project'
@@ -364,24 +365,51 @@ function handleReset() {
 
 const renameVisible = ref(false)
 const renameLoading = ref(false)
-const renameForm = reactive({ id: 0, name: '' })
+const renameForm = reactive({ id: 0, name: '', level: 'module' as RowLevel })
+
+// 行内最具体层级：模块 > 版本 > 工程
+type RowLevel = 'project' | 'version' | 'module'
+const levelLabelMap: Record<RowLevel, string> = {
+  project: '工程',
+  version: '版本',
+  module: '模块'
+}
+
+function rowLevel(row: VersionInfo): RowLevel {
+  if (row.moduleId != null) return 'module'
+  if (row.versionId != null) return 'version'
+  return 'project'
+}
+
+const renameTitle = computed(() => `编辑${levelLabelMap[renameForm.level]}`)
 
 function handleEdit(row: VersionInfo) {
-  renameForm.id = row.moduleId as number
-  renameForm.name = row.moduleName
+  const level = rowLevel(row)
+  renameForm.id =
+    (level === 'module' ? row.moduleId : level === 'version' ? row.versionId : row.applicationId) as number
+  renameForm.name =
+    level === 'module' ? row.moduleName : level === 'version' ? row.versionName : row.applicationName
+  renameForm.level = level
   renameVisible.value = true
 }
 
 async function handleRenameConfirm() {
   const name = renameForm.name.trim()
   if (!name) {
-    ElMessage.warning('模块名称不能为空')
+    ElMessage.warning(`${levelLabelMap[renameForm.level]}名称不能为空`)
     return
   }
   renameLoading.value = true
   try {
-    await updateModule({ id: renameForm.id, name })
-    ElMessage.success('模块更新成功')
+    const level = renameForm.level
+    if (level === 'module') {
+      await updateModule({ id: renameForm.id, name })
+    } else if (level === 'version') {
+      await updateVersion({ id: renameForm.id, name })
+    } else {
+      await updateProject({ id: renameForm.id, name })
+    }
+    ElMessage.success(`${levelLabelMap[level]}更新成功`)
     renameVisible.value = false
     await handleSearch()
   } finally {
@@ -390,9 +418,14 @@ async function handleRenameConfirm() {
 }
 
 async function handleDelete(row: VersionInfo) {
-  if (row.moduleId == null) return
+  const level = rowLevel(row)
+  const id =
+    (level === 'module' ? row.moduleId : level === 'version' ? row.versionId : row.applicationId) as number
+  const label = levelLabelMap[level]
+  const name =
+    level === 'module' ? row.moduleName : level === 'version' ? row.versionName : row.applicationName
   try {
-    await ElMessageBox.confirm(`确认删除模块「${row.moduleName}」？删除后不可恢复。`, '提示', {
+    await ElMessageBox.confirm(`确认删除${label}「${name}」？删除后不可恢复。`, '提示', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消'
@@ -400,8 +433,14 @@ async function handleDelete(row: VersionInfo) {
   } catch {
     return
   }
-  await deleteModule(row.moduleId)
-  ElMessage.success('模块删除成功')
+  if (level === 'module') {
+    await deleteModule(id)
+  } else if (level === 'version') {
+    await deleteVersion(id)
+  } else {
+    await deleteProject(id)
+  }
+  ElMessage.success(`${label}删除成功`)
   await handleSearch()
 }
 

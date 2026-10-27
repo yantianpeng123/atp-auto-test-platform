@@ -12,4 +12,14 @@ public interface ApplicationVersionService extends IService<ApplicationVersion> 
      * 新增版本（版本名同工程下唯一，工程描述非空则同步更新）
      */
     void createVersion(Long applicationId, String name, String description);
+
+    /**
+     * 重命名版本（同工程下名称唯一）
+     */
+    void renameVersion(Long id, String name);
+
+    /**
+     * 删除版本（级联逻辑删除其模块）
+     */
+    void removeVersion(Long id);
 }

@@ -3,12 +3,15 @@ package com.atp.module.base.service.impl;
 import com.atp.common.exception.BizException;
 import com.atp.common.result.ResultCode;
 import com.atp.module.base.entity.Application;
+import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
 import com.atp.module.base.mapper.ApplicationVersionMapper;
+import com.atp.module.base.service.ApplicationModuleService;
 import com.atp.module.base.service.ApplicationService;
 import com.atp.module.base.service.ApplicationVersionService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -22,6 +25,9 @@ public class ApplicationVersionServiceImpl extends ServiceImpl<ApplicationVersio
         implements ApplicationVersionService {
 
     private final ApplicationService applicationService;
+
+    @Autowired
+    private ApplicationModuleService moduleService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -51,5 +57,38 @@ public class ApplicationVersionServiceImpl extends ServiceImpl<ApplicationVersio
         version.setApplicationId(applicationId);
         version.setName(name);
         save(version);
+    }
+
+    @Override
+    public void renameVersion(Long id, String name) {
+        ApplicationVersion version = getById(id);
+        if (version == null) {
+            throw new BizException(ResultCode.VERSION_NOT_FOUND);
+        }
+        if (!version.getName().equals(name)) {
+            long count = lambdaQuery()
+                    .eq(ApplicationVersion::getApplicationId, version.getApplicationId())
+                    .eq(ApplicationVersion::getName, name)
+                    .count();
+            if (count > 0) {
+                throw new BizException(ResultCode.VERSION_NAME_EXISTS);
+            }
+        }
+        version.setName(name);
+        updateById(version);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeVersion(Long id) {
+        ApplicationVersion version = getById(id);
+        if (version == null) {
+            throw new BizException(ResultCode.VERSION_NOT_FOUND);
+        }
+        // 级联逻辑删除该版本下的模块，避免孤儿数据
+        moduleService.lambdaUpdate()
+                .eq(ApplicationModule::getVersionId, id)
+                .remove();
+        removeById(id);
     }
 }

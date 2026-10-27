@@ -125,6 +125,18 @@ export interface ModuleUpdateParams {
   name: string
 }
 
+/** 工程重命名入参 */
+export interface ApplicationUpdateParams {
+  id: number
+  name: string
+}
+
+/** 版本重命名入参 */
+export interface VersionUpdateParams {
+  id: number
+  name: string
+}
+
 /**
  * 项目
  */
