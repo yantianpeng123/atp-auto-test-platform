@@ -99,17 +99,17 @@
       />
     </el-card>
 
-    <!-- 新增弹窗（保持不变） -->
+    <!-- 新增 / 编辑工程 共用弹窗（编辑时类型为「工程」且置灰） -->
     <el-dialog
       v-model="dialogVisible"
-      title="新增"
+      :title="editMode ? '编辑工程' : '新增'"
       width="520px"
       :close-on-click-modal="false"
       @closed="handleDialogClosed"
     >
       <el-form ref="formEl" :model="form" :rules="rules" label-width="90px" class="create-form">
         <el-form-item label="新增类型">
-          <el-radio-group v-model="form.type" @change="handleTypeChange">
+          <el-radio-group v-model="form.type" :disabled="editMode" @change="handleTypeChange">
             <el-radio v-for="item in typeOptions" :key="item.value" :value="item.value">
               {{ item.label }}
             </el-radio>
@@ -385,10 +385,21 @@ const renameTitle = computed(() => `编辑${levelLabelMap[renameForm.level]}`)
 
 function handleEdit(row: VersionInfo) {
   const level = rowLevel(row)
+  if (level === 'project') {
+    // 仅工程：复用「新增」弹窗，类型锁定为「工程」并置灰，名称/描述可改
+    resetForm()
+    editMode.value = true
+    editId.value = row.applicationId as number
+    form.type = 'PROJECT'
+    form.name = row.applicationName
+    form.description = row.applicationDescription ?? ''
+    dialogVisible.value = true
+    return
+  }
   renameForm.id =
-    (level === 'module' ? row.moduleId : level === 'version' ? row.versionId : row.applicationId) as number
+    (level === 'module' ? row.moduleId : row.versionId) as number
   renameForm.name =
-    level === 'module' ? row.moduleName : level === 'version' ? row.versionName : row.applicationName
+    level === 'module' ? row.moduleName : row.versionName
   renameForm.level = level
   renameVisible.value = true
 }
@@ -444,11 +455,15 @@ async function handleDelete(row: VersionInfo) {
   await handleSearch()
 }
 
-/* ==================== 新增（保持不变） ==================== */
+/* ==================== 新增 / 编辑工程 共用弹窗 ==================== */
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formEl = ref<FormInstance>()
+
+// 编辑工程模式：复用新增弹窗，类型锁定为「工程」且置灰
+const editMode = ref(false)
+const editId = ref<number | null>(null)
 
 const typeOptions = [
   { label: '工程', value: 'PROJECT' },
@@ -517,6 +532,7 @@ function resetForm() {
 }
 
 function handleOpenCreate() {
+  editMode.value = false
   form.type = 'PROJECT'
   resetForm()
   dialogVisible.value = true
@@ -524,11 +540,13 @@ function handleOpenCreate() {
 
 function handleTypeChange() {
   // 切换类型时清空已填内容并重置校验状态
+  editMode.value = false
   resetForm()
   formEl.value?.clearValidate()
 }
 
 function handleDialogClosed() {
+  editMode.value = false
   resetForm()
   formEl.value?.clearValidate()
 }
@@ -555,13 +573,17 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (form.type === 'PROJECT') {
-      await createProject({ projectId: projectStore.currentProject!.id, name: form.name, description: form.description })
+      if (editMode.value) {
+        await updateProject({ id: editId.value as number, name: form.name, description: form.description })
+      } else {
+        await createProject({ projectId: projectStore.currentProject!.id, name: form.name, description: form.description })
+      }
     } else if (form.type === 'VERSION') {
       await createVersion({ applicationId: form.applicationId!, name: form.name, description: form.description })
     } else {
       await createModules({ versionId: form.versionId!, names: moduleList.value, description: form.description })
     }
-    ElMessage.success(`${typeLabel.value}新增成功`)
+    ElMessage.success(editMode.value ? '工程更新成功' : `${typeLabel.value}新增成功`)
     dialogVisible.value = false
     await loadProjectOptions()
     handleSearch()

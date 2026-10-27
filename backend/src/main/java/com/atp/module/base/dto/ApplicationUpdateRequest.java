@@ -15,4 +15,7 @@ public class ApplicationUpdateRequest {
 
     @NotBlank(message = "工程名称不能为空")
     private String name;
+
+    /** 工程描述，可空；更新时若不为 null 则覆盖 */
+    private String description;
 }

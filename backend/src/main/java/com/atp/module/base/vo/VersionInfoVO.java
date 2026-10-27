@@ -24,5 +24,7 @@ public class VersionInfoVO {
 
     private String applicationName;
 
+    private String applicationDescription;
+
     private LocalDateTime updateTime;
 }

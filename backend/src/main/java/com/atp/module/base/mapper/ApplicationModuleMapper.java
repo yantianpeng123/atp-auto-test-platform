@@ -25,6 +25,7 @@ public interface ApplicationModuleMapper extends BaseMapper<ApplicationModule> {
                                v.name AS versionName,
                                a.id AS applicationId,
                                a.name AS applicationName,
+                               a.description AS applicationDescription,
                                m.update_time AS updateTime
                         from tb_application a
                 left join tb_application_version v on a.id = v.application_id

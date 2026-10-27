@@ -77,6 +77,7 @@ export interface VersionInfo {
   versionName: string
   applicationId: number
   applicationName: string
+  applicationDescription?: string | null
   updateTime: string
 }
 
@@ -129,6 +130,7 @@ export interface ModuleUpdateParams {
 export interface ApplicationUpdateParams {
   id: number
   name: string
+  description?: string
 }
 
 /** 版本重命名入参 */

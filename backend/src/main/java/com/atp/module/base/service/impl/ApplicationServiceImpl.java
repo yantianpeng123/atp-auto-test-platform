@@ -53,7 +53,7 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void renameApplication(Long id, String name) {
+    public void renameApplication(Long id, String name, String description) {
         Application app = getById(id);
         if (app == null) {
             throw new BizException(ResultCode.PROJECT_NOT_FOUND);
@@ -65,6 +65,9 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
             }
         }
         app.setName(name);
+        if (description != null) {
+            app.setDescription(description);
+        }
         updateById(app);
     }
 

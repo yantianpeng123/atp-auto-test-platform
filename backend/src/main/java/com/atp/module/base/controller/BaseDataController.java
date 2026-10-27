@@ -133,7 +133,7 @@ public class BaseDataController {
     /** 重命名工程 */
     @PutMapping("/project")
     public Result<Void> renameApplication(@Valid @RequestBody ApplicationUpdateRequest request) {
-        applicationService.renameApplication(request.getId(), request.getName());
+        applicationService.renameApplication(request.getId(), request.getName(), request.getDescription());
         return Result.ok("工程更新成功");
     }
 
