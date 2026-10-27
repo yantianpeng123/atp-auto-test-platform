@@ -28,8 +28,8 @@ public interface ApplicationModuleMapper extends BaseMapper<ApplicationModule> {
                                a.description AS applicationDescription,
                                m.update_time AS updateTime
                         from tb_application a
-                left join tb_application_version v on a.id = v.application_id
-                left join tb_application_module m on v.id = m.version_id
+                left join tb_application_version v on a.id = v.application_id AND v.deleted = 0
+                left join tb_application_module m on v.id = m.version_id AND m.deleted = 0
                         WHERE a.deleted = 0
               AND (#{projectId} IS NULL OR a.project_id = #{projectId})
               AND (#{applicationId} IS NULL OR a.id = #{applicationId})
