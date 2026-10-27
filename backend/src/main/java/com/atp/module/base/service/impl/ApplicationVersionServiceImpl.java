@@ -5,10 +5,11 @@ import com.atp.common.result.ResultCode;
 import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
+import com.atp.module.base.mapper.ApplicationModuleMapper;
 import com.atp.module.base.mapper.ApplicationVersionMapper;
-import com.atp.module.base.service.ApplicationModuleService;
 import com.atp.module.base.service.ApplicationService;
 import com.atp.module.base.service.ApplicationVersionService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +28,7 @@ public class ApplicationVersionServiceImpl extends ServiceImpl<ApplicationVersio
     private final ApplicationService applicationService;
 
     @Autowired
-    private ApplicationModuleService moduleService;
+    private ApplicationModuleMapper moduleMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -104,10 +105,8 @@ public class ApplicationVersionServiceImpl extends ServiceImpl<ApplicationVersio
         if (version == null) {
             throw new BizException(ResultCode.VERSION_NOT_FOUND);
         }
-        // 级联逻辑删除该版本下的模块，避免孤儿数据
-        moduleService.lambdaUpdate()
-                .eq(ApplicationModule::getVersionId, id)
-                .remove();
+        // 级联逻辑删除该版本下的模块，避免孤儿数据（直接用 Mapper，避免与模块 Service 形成循环依赖）
+        moduleMapper.delete(new LambdaQueryWrapper<ApplicationModule>().eq(ApplicationModule::getVersionId, id));
         removeById(id);
     }
 }

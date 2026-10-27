@@ -7,9 +7,10 @@ import com.atp.module.base.entity.Application;
 import com.atp.module.base.entity.ApplicationModule;
 import com.atp.module.base.entity.ApplicationVersion;
 import com.atp.module.base.mapper.ApplicationMapper;
-import com.atp.module.base.service.ApplicationModuleService;
+import com.atp.module.base.mapper.ApplicationModuleMapper;
+import com.atp.module.base.mapper.ApplicationVersionMapper;
 import com.atp.module.base.service.ApplicationService;
-import com.atp.module.base.service.ApplicationVersionService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,10 +26,10 @@ import java.util.stream.Collectors;
 public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Application> implements ApplicationService {
 
     @Autowired
-    private ApplicationVersionService versionService;
+    private ApplicationVersionMapper versionMapper;
 
     @Autowired
-    private ApplicationModuleService moduleService;
+    private ApplicationModuleMapper moduleMapper;
 
     @Override
     public Application getByName(String name, Long projectId) {
@@ -78,18 +79,15 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
         if (app == null) {
             throw new BizException(ResultCode.PROJECT_NOT_FOUND);
         }
-        // 级联逻辑删除其版本与模块，避免孤儿数据
-        List<ApplicationVersion> versions = versionService.lambdaQuery()
-                .eq(ApplicationVersion::getApplicationId, id)
-                .list();
+        // 级联逻辑删除其版本与模块，避免孤儿数据（直接用 Mapper，避免与子级 Service 形成循环依赖）
+        List<ApplicationVersion> versions = versionMapper.selectList(
+                new LambdaQueryWrapper<ApplicationVersion>().eq(ApplicationVersion::getApplicationId, id));
         if (!versions.isEmpty()) {
             List<Long> versionIds = versions.stream()
                     .map(ApplicationVersion::getId)
                     .collect(Collectors.toList());
-            moduleService.lambdaUpdate()
-                    .in(ApplicationModule::getVersionId, versionIds)
-                    .remove();
-            versionService.removeByIds(versionIds);
+            moduleMapper.delete(new LambdaQueryWrapper<ApplicationModule>().in(ApplicationModule::getVersionId, versionIds));
+            versionMapper.delete(new LambdaQueryWrapper<ApplicationVersion>().in(ApplicationVersion::getId, versionIds));
         }
         removeById(id);
     }
